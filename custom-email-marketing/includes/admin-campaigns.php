@@ -309,6 +309,7 @@ function cem_handle_campaign_actions() {
                     'from_email'    => $from_email,
                     'reply_to'      => $reply_to,
                     'campaign_type' => $campaign_type,
+                    'list_id'       => $list_id,
                     'updated_at'    => current_time('mysql'),
                 ),
                 array(
@@ -321,6 +322,7 @@ function cem_handle_campaign_actions() {
                     '%s',
                     '%s',
                     '%s',
+                    '%d',
                     '%s',
                 ),
                 array(
