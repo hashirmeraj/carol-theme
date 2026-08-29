@@ -10,6 +10,130 @@ if (!defined('ABSPATH')) {
     exit;
 }
 /**
+ * Create custom email marketing database tables.
+ */
+function cem_create_database_tables() {
+
+    global $wpdb;
+
+    require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+
+    $charset_collate = $wpdb->get_charset_collate();
+
+    /*
+     * Contacts table
+     */
+    $contacts_table = $wpdb->prefix . 'em_contacts';
+
+    $sql_contacts = "CREATE TABLE $contacts_table (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+        email VARCHAR(320) NOT NULL,
+        first_name VARCHAR(100) NOT NULL DEFAULT '',
+        last_name VARCHAR(100) NOT NULL DEFAULT '',
+        phone VARCHAR(50) NOT NULL DEFAULT '',
+        status VARCHAR(20) NOT NULL DEFAULT 'active',
+        source VARCHAR(100) NOT NULL DEFAULT '',
+        marketing_consent TINYINT(1) NOT NULL DEFAULT 0,
+        consent_at DATETIME NULL,
+        consent_ip VARCHAR(45) NOT NULL DEFAULT '',
+        created_at DATETIME NOT NULL,
+        updated_at DATETIME NOT NULL,
+        PRIMARY KEY (id),
+        UNIQUE KEY email (email),
+        KEY status (status),
+        KEY source (source)
+    ) $charset_collate;";
+
+    /*
+     * Lists table
+     */
+    $lists_table = $wpdb->prefix . 'em_lists';
+
+    $sql_lists = "CREATE TABLE $lists_table (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+        name VARCHAR(255) NOT NULL,
+        description TEXT NULL,
+        status VARCHAR(20) NOT NULL DEFAULT 'active',
+        created_at DATETIME NOT NULL,
+        updated_at DATETIME NOT NULL,
+        PRIMARY KEY (id),
+        UNIQUE KEY name (name)
+    ) $charset_collate;";
+
+    /*
+     * Contact/List relationship table
+     */
+    $contact_lists_table = $wpdb->prefix . 'em_contact_lists';
+
+    $sql_contact_lists = "CREATE TABLE $contact_lists_table (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+        contact_id BIGINT UNSIGNED NOT NULL,
+        list_id BIGINT UNSIGNED NOT NULL,
+        status VARCHAR(20) NOT NULL DEFAULT 'subscribed',
+        subscribed_at DATETIME NULL,
+        unsubscribed_at DATETIME NULL,
+        created_at DATETIME NOT NULL,
+        updated_at DATETIME NOT NULL,
+        PRIMARY KEY (id),
+        UNIQUE KEY contact_list (contact_id, list_id),
+        KEY contact_id (contact_id),
+        KEY list_id (list_id),
+        KEY status (status)
+    ) $charset_collate;";
+
+    /*
+     * Create tables.
+     */
+    dbDelta($sql_contacts);
+    dbDelta($sql_lists);
+    dbDelta($sql_contact_lists);
+
+    /*
+     * Create default Newsletter list.
+     */
+    $newsletter_exists = $wpdb->get_var(
+        $wpdb->prepare(
+            "SELECT id FROM $lists_table WHERE name = %s LIMIT 1",
+            'Newsletter'
+        )
+    );
+
+    if (!$newsletter_exists) {
+
+        $now = current_time('mysql');
+
+        $wpdb->insert(
+            $lists_table,
+            array(
+                'name'        => 'Newsletter',
+                'description' => 'Main newsletter subscribers',
+                'status'      => 'active',
+                'created_at'  => $now,
+                'updated_at'  => $now,
+            ),
+            array(
+                '%s',
+                '%s',
+                '%s',
+                '%s',
+                '%s',
+            )
+        );
+    }
+
+    /*
+     * Store database version.
+     */
+    update_option('cem_db_version', '1.0.0');
+}
+
+register_activation_hook(
+    __FILE__,
+    'cem_create_database_tables'
+);
+
+
+/**
  * Add admin menu.
  */
 add_action('admin_menu', function () {
