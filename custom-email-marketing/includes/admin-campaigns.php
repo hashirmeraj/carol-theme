@@ -1727,8 +1727,7 @@ function cem_render_campaign_editor($campaign_id) {
                 href="<?php echo esc_url(
                     add_query_arg(
                         array(
-                            'page' =>
-                                'cem-campaigns',
+                            'page' => 'cem-campaigns',
                         ),
                         admin_url('admin.php')
                     )
@@ -1758,6 +1757,10 @@ function cem_render_campaign_editor($campaign_id) {
             "
         >
 
+            <!-- ========================================= -->
+            <!-- MAIN CAMPAIGN FORM -->
+            <!-- ========================================= -->
+
             <form method="post">
 
                 <?php
@@ -1780,6 +1783,8 @@ function cem_render_campaign_editor($campaign_id) {
 
 
                 <table class="form-table">
+
+                    <!-- Campaign Name -->
 
                     <tr>
 
@@ -1807,6 +1812,8 @@ function cem_render_campaign_editor($campaign_id) {
                     </tr>
 
 
+                    <!-- Subject -->
+
                     <tr>
 
                         <th>
@@ -1833,6 +1840,8 @@ function cem_render_campaign_editor($campaign_id) {
                     </tr>
 
 
+                    <!-- From Name -->
+
                     <tr>
 
                         <th>
@@ -1857,6 +1866,8 @@ function cem_render_campaign_editor($campaign_id) {
 
                     </tr>
 
+
+                    <!-- From Email -->
 
                     <tr>
 
@@ -1884,6 +1895,8 @@ function cem_render_campaign_editor($campaign_id) {
                     </tr>
 
 
+                    <!-- Reply-To -->
+
                     <tr>
 
                         <th>
@@ -1908,6 +1921,8 @@ function cem_render_campaign_editor($campaign_id) {
 
                     </tr>
 
+
+                    <!-- Campaign Type -->
 
                     <tr>
 
@@ -1950,6 +1965,8 @@ function cem_render_campaign_editor($campaign_id) {
 
                     </tr>
 
+
+                    <!-- Mailing List -->
 
                     <tr>
 
@@ -2017,49 +2034,12 @@ function cem_render_campaign_editor($campaign_id) {
 
                             </p>
 
-
-                            <?php if ($campaign->status === 'draft' && $recipient_count > 0): ?>
-
-                                <form method="post" style="margin-top:15px;">
-
-                                    <?php
-
-                                    wp_nonce_field(
-                                        'cem_prepare_recipients_action',
-                                        'cem_prepare_recipients_nonce'
-                                    );
-
-                                    ?>
-
-                                    <input
-                                        type="hidden"
-                                        name="campaign_id"
-                                        value="<?php echo esc_attr(
-                                            $campaign->id
-                                        ); ?>"
-                                    >
-
-                                    <button
-                                        type="submit"
-                                        name="cem_prepare_recipients"
-                                        class="button"
-                                    >
-                                        Prepare Recipients
-                                    </button>
-
-                                    <p class="description">
-                                        This prepares the subscribers for the campaign.
-                                        No emails will be sent.
-                                    </p>
-
-                                </form>
-
-                            <?php endif; ?>
-
                         </td>
 
                     </tr>
 
+
+                    <!-- Status -->
 
                     <tr>
 
@@ -2088,12 +2068,19 @@ function cem_render_campaign_editor($campaign_id) {
                     </tr>
 
                 </table>
-                <!-- Email Content -->
-            <h2>
-                Email Content
-            </h2>
 
-            <div
+
+                <!-- ========================================= -->
+                <!-- EMAIL CONTENT -->
+                <!-- ========================================= -->
+
+                <hr>
+
+                <h2>
+                    Email Content
+                </h2>
+
+                <div
                     style="
                         background:#fff;
                         border:1px solid #dcdcde;
@@ -2121,6 +2108,109 @@ function cem_render_campaign_editor($campaign_id) {
                     ?>
 
                 </div>
+
+
+                <!-- ========================================= -->
+                <!-- SAVE CAMPAIGN -->
+                <!-- ========================================= -->
+
+                <p style="margin-top:20px;">
+
+                    <button
+                        type="submit"
+                        name="cem_update_campaign"
+                        class="button button-primary"
+                    >
+                        Save Campaign
+                    </button>
+
+                </p>
+
+            </form>
+
+
+            <!-- ========================================= -->
+            <!-- PREPARE RECIPIENTS - SEPARATE FORM -->
+            <!-- ========================================= -->
+
+            <?php if (
+                $campaign->status === 'draft' &&
+                $recipient_count > 0
+            ): ?>
+
+                <div
+                    style="
+                        margin-top:20px;
+                        padding:20px;
+                        background:#f6f7f7;
+                        border:1px solid #dcdcde;
+                    "
+                >
+
+                    <h3>
+                        Recipients
+                    </h3>
+
+                    <p>
+                        Eligible Recipients:
+                        <strong>
+                            <?php
+                            echo esc_html(
+                                number_format_i18n(
+                                    (int) $recipient_count
+                                )
+                            );
+                            ?>
+                        </strong>
+                    </p>
+
+
+                    <form method="post">
+
+                        <?php
+
+                        wp_nonce_field(
+                            'cem_prepare_recipients_action',
+                            'cem_prepare_recipients_nonce'
+                        );
+
+                        ?>
+
+
+                        <input
+                            type="hidden"
+                            name="campaign_id"
+                            value="<?php echo esc_attr(
+                                $campaign->id
+                            ); ?>"
+                        >
+
+
+                        <button
+                            type="submit"
+                            name="cem_prepare_recipients"
+                            class="button"
+                        >
+                            Prepare Recipients
+                        </button>
+
+
+                        <p class="description">
+                            This prepares the subscribers for the campaign.
+                            No emails will be sent.
+                        </p>
+
+                    </form>
+
+                </div>
+
+            <?php endif; ?>
+
+
+            <!-- ========================================= -->
+            <!-- TEST EMAIL - SEPARATE FORM -->
+            <!-- ========================================= -->
+
             <div
                 style="
                     margin-top:20px;
@@ -2139,6 +2229,7 @@ function cem_render_campaign_editor($campaign_id) {
                     This will not send to your campaign recipients.
                 </p>
 
+
                 <form method="post">
 
                     <?php
@@ -2150,6 +2241,7 @@ function cem_render_campaign_editor($campaign_id) {
 
                     ?>
 
+
                     <input
                         type="hidden"
                         name="campaign_id"
@@ -2158,13 +2250,18 @@ function cem_render_campaign_editor($campaign_id) {
                         ); ?>"
                     >
 
+
                     <input
                         type="email"
                         name="test_email"
                         placeholder="your@email.com"
                         required
-                        style="width:350px;"
+                        style="
+                            width:350px;
+                            max-width:100%;
+                        "
                     >
+
 
                     <button
                         type="submit"
@@ -2179,28 +2276,13 @@ function cem_render_campaign_editor($campaign_id) {
             </div>
 
 
-                <p>
-
-                    <button
-                        type="submit"
-                        name="cem_update_campaign"
-                        class="button button-primary"
-                    >
-                        Save Campaign
-                    </button>
-
-                </p>
-
-            </form>
-
-
-            <hr>
-
-            
-
+            <!-- ========================================= -->
+            <!-- CURRENT STATUS -->
+            <!-- ========================================= -->
 
             <div
                 style="
+                    margin-top:20px;
                     background:#f6f7f7;
                     border:1px solid #dcdcde;
                     padding:20px;
@@ -2208,12 +2290,9 @@ function cem_render_campaign_editor($campaign_id) {
             >
 
                 <p>
-                    Email designer will be added in the next step.
-                    </p>
-
-                <p>
                     This campaign is currently only a draft.
-                    No emails will be sent from this screen.
+                    No emails will be sent from this screen except
+                    when you explicitly use Send Test Email.
                 </p>
 
             </div>
@@ -2221,8 +2300,6 @@ function cem_render_campaign_editor($campaign_id) {
         </div>
 
     </div>
-
-
 
     <?php
 }
