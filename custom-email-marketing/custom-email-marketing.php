@@ -10,6 +10,260 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+
+/**
+ * Send an email through SendLayer.
+ */
+function cem_send_email_via_sendlayer(
+    $to_email,
+    $to_name,
+    $subject,
+    $html_content,
+    $plain_content = '',
+    $from_email = '',
+    $from_name = '',
+    $reply_to = ''
+) {
+
+    $api_key = get_option(
+        'cem_sendlayer_api_key',
+        ''
+    );
+
+    /*
+     * Use saved SendLayer settings if
+     * from information wasn't supplied.
+     */
+    if (empty($from_email)) {
+        $from_email = get_option(
+            'cem_sendlayer_from_email',
+            ''
+        );
+    }
+
+    if (empty($from_name)) {
+        $from_name = get_option(
+            'cem_sendlayer_from_name',
+            ''
+        );
+    }
+
+    if (empty($reply_to)) {
+        $reply_to = $from_email;
+    }
+
+
+    /*
+     * Validate API key.
+     */
+    if (empty($api_key)) {
+
+        return array(
+            'success' => false,
+            'message' => 'SendLayer API key is not configured.',
+        );
+    }
+
+
+    /*
+     * Validate sender.
+     */
+    if (
+        empty($from_email) ||
+        !is_email($from_email)
+    ) {
+
+        return array(
+            'success' => false,
+            'message' => 'Invalid SendLayer From email address.',
+        );
+    }
+
+
+    /*
+     * Validate recipient.
+     */
+    if (
+        empty($to_email) ||
+        !is_email($to_email)
+    ) {
+
+        return array(
+            'success' => false,
+            'message' => 'Invalid recipient email address.',
+        );
+    }
+
+
+    /*
+     * Plain text fallback.
+     */
+    if (empty($plain_content)) {
+
+        $plain_content = wp_strip_all_tags(
+            $html_content
+        );
+    }
+
+
+    /*
+     * Build SendLayer payload.
+     */
+    $payload = array(
+        'From' => array(
+            'name'  => $from_name ?: 'Email Marketing',
+            'email' => $from_email,
+        ),
+
+        'To' => array(
+            array(
+                'name'  => $to_name ?: '',
+                'email' => $to_email,
+            ),
+        ),
+
+        'Subject' => $subject,
+
+        'ContentType' => 'HTML',
+
+        'HTMLContent' => $html_content,
+
+        'PlainContent' => $plain_content,
+    );
+
+
+    /*
+     * Add Reply-To when available.
+     */
+    if (
+        !empty($reply_to) &&
+        is_email($reply_to)
+    ) {
+
+        $payload['ReplyTo'] = array(
+            array(
+                'email' => $reply_to,
+            ),
+        );
+    }
+
+
+    /*
+     * Send through SendLayer.
+     */
+    $response = wp_remote_post(
+        'https://console.sendlayer.com/api/v1/email',
+        array(
+            'timeout' => 30,
+
+            'headers' => array(
+                'Authorization' =>
+                    'Bearer ' . $api_key,
+
+                'Content-Type' =>
+                    'application/json',
+            ),
+
+            'body' =>
+                wp_json_encode($payload),
+        )
+    );
+
+
+    /*
+     * WordPress HTTP error.
+     */
+    if (is_wp_error($response)) {
+
+        return array(
+            'success' => false,
+            'message' =>
+                'WordPress HTTP Error: ' .
+                $response->get_error_message(),
+        );
+    }
+
+
+    /*
+     * Read response.
+     */
+    $status_code =
+        wp_remote_retrieve_response_code(
+            $response
+        );
+
+    $body =
+        wp_remote_retrieve_body(
+            $response
+        );
+
+    $data =
+        json_decode(
+            $body,
+            true
+        );
+
+
+    /*
+     * Successful SendLayer response.
+     */
+    if (
+        $status_code >= 200 &&
+        $status_code < 300
+    ) {
+
+        $message_id = '';
+
+        if (
+            is_array($data) &&
+            isset($data['MessageID'])
+        ) {
+
+            $message_id =
+                sanitize_text_field(
+                    $data['MessageID']
+                );
+        }
+
+
+        return array(
+            'success'    => true,
+            'message'    => 'Email sent successfully.',
+            'message_id' => $message_id,
+        );
+    }
+
+
+    /*
+     * SendLayer error.
+     */
+    if (
+        is_array($data) &&
+        isset($data['Errors'])
+    ) {
+
+        $error_text =
+            wp_json_encode(
+                $data['Errors']
+            );
+
+    } else {
+
+        $error_text = $body;
+    }
+
+
+    return array(
+        'success' => false,
+        'message' =>
+            'SendLayer Error (' .
+            $status_code .
+            '): ' .
+            $error_text,
+    );
+}
+
+
 require_once plugin_dir_path(__FILE__) . 'includes/elementor-integration.php';
 require_once plugin_dir_path(__FILE__) . 'includes/admin-contacts.php';
 require_once plugin_dir_path(__FILE__) . 'includes/admin-lists.php';
