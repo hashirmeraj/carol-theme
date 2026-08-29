@@ -441,6 +441,211 @@ function cem_handle_campaign_actions() {
 
 
     /*
+ * PREPARE CAMPAIGN RECIPIENTS
+ */
+if (
+    isset($_POST['cem_prepare_recipients']) &&
+    check_admin_referer(
+        'cem_prepare_recipients_action',
+        'cem_prepare_recipients_nonce'
+    )
+) {
+
+    $campaign_id = isset($_POST['campaign_id'])
+        ? absint($_POST['campaign_id'])
+        : 0;
+
+    if (!$campaign_id) {
+
+        add_settings_error(
+            'cem_campaigns',
+            'invalid_campaign',
+            'Invalid campaign.',
+            'error'
+        );
+
+        return;
+    }
+
+
+    /*
+     * Get campaign.
+     */
+    $campaign = $wpdb->get_row(
+        $wpdb->prepare(
+            "
+            SELECT *
+            FROM $campaigns_table
+            WHERE id = %d
+            LIMIT 1
+            ",
+            $campaign_id
+        )
+    );
+
+
+    if (!$campaign) {
+
+        add_settings_error(
+            'cem_campaigns',
+            'campaign_not_found',
+            'Campaign not found.',
+            'error'
+        );
+
+        return;
+    }
+
+
+    /*
+     * Campaign must have a list.
+     */
+    if (empty($campaign->list_id)) {
+
+        add_settings_error(
+            'cem_campaigns',
+            'campaign_list_required',
+            'Please select a mailing list first.',
+            'error'
+        );
+
+        return;
+    }
+
+
+    /*
+     * Only prepare draft campaigns.
+     */
+    if ($campaign->status !== 'draft') {
+
+        add_settings_error(
+            'cem_campaigns',
+            'invalid_campaign_status',
+            'Recipients can only be prepared for a draft campaign.',
+            'error'
+        );
+
+        return;
+    }
+
+
+    $contact_lists_table =
+        $wpdb->prefix . 'em_contact_lists';
+
+    $contacts_table =
+        $wpdb->prefix . 'em_contacts';
+
+    $recipients_table =
+        $wpdb->prefix . 'em_campaign_recipients';
+
+
+    /*
+     * Get eligible contacts.
+     */
+    $contacts = $wpdb->get_results(
+        $wpdb->prepare(
+            "
+            SELECT DISTINCT
+                c.id
+            FROM $contact_lists_table cl
+            INNER JOIN $contacts_table c
+                ON c.id = cl.contact_id
+            WHERE cl.list_id = %d
+            AND cl.status = 'subscribed'
+            AND c.status = 'active'
+            ORDER BY c.id ASC
+            ",
+            $campaign->list_id
+        )
+    );
+
+
+    if (empty($contacts)) {
+
+        add_settings_error(
+            'cem_campaigns',
+            'no_recipients',
+            'No eligible subscribers were found in this mailing list.',
+            'warning'
+        );
+
+        return;
+    }
+
+
+    /*
+     * Insert recipients.
+     *
+     * INSERT IGNORE protects against duplicates because
+     * campaign_id + contact_id is UNIQUE.
+     */
+    $now = current_time('mysql');
+
+    $inserted_count = 0;
+
+    foreach ($contacts as $contact) {
+
+        $result = $wpdb->query(
+            $wpdb->prepare(
+                "
+                INSERT IGNORE INTO $recipients_table
+                (
+                    campaign_id,
+                    contact_id,
+                    status,
+                    queued_at,
+                    sent_at,
+                    failed_at,
+                    error_message,
+                    created_at,
+                    updated_at
+                )
+                VALUES
+                (
+                    %d,
+                    %d,
+                    'pending',
+                    NULL,
+                    NULL,
+                    NULL,
+                    NULL,
+                    %s,
+                    %s
+                )
+                ",
+                $campaign_id,
+                $contact->id,
+                $now,
+                $now
+            )
+        );
+
+
+        if ($result === 1) {
+            $inserted_count++;
+        }
+    }
+
+
+    /*
+     * Redirect back to campaign.
+     */
+    wp_safe_redirect(
+        add_query_arg(
+            array(
+                'page'        => 'cem-campaigns',
+                'campaign_id' => $campaign_id,
+                'updated'     => 'recipients_prepared',
+                'prepared'    => $inserted_count,
+            ),
+            admin_url('admin.php')
+        )
+    );
+
+    exit;
+}
+
+    /*
      * DELETE CAMPAIGN
      */
     if (
@@ -1660,6 +1865,45 @@ function cem_render_campaign_editor($campaign_id) {
 
                             </p>
 
+
+                            <?php if ($campaign->status === 'draft' && $recipient_count > 0): ?>
+
+                                <form method="post" style="margin-top:15px;">
+
+                                    <?php
+
+                                    wp_nonce_field(
+                                        'cem_prepare_recipients_action',
+                                        'cem_prepare_recipients_nonce'
+                                    );
+
+                                    ?>
+
+                                    <input
+                                        type="hidden"
+                                        name="campaign_id"
+                                        value="<?php echo esc_attr(
+                                            $campaign->id
+                                        ); ?>"
+                                    >
+
+                                    <button
+                                        type="submit"
+                                        name="cem_prepare_recipients"
+                                        class="button"
+                                    >
+                                        Prepare Recipients
+                                    </button>
+
+                                    <p class="description">
+                                        This prepares the subscribers for the campaign.
+                                        No emails will be sent.
+                                    </p>
+
+                                </form>
+
+                            <?php endif; ?>
+
                         </td>
 
                     </tr>
@@ -1740,6 +1984,8 @@ function cem_render_campaign_editor($campaign_id) {
 
     </div>
 
+
+
     <?php
 }
 
@@ -1773,6 +2019,9 @@ function cem_display_campaign_notice() {
 
         'cannot_delete' =>
             'A campaign that is currently sending cannot be deleted.',
+
+        'recipients_prepared' =>
+            'Campaign recipients prepared successfully.',
     );
 
 
