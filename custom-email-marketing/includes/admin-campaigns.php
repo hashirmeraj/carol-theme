@@ -2088,31 +2088,12 @@ function cem_render_campaign_editor($campaign_id) {
                     </tr>
 
                 </table>
+                <!-- Email Content -->
+            <h2>
+                Email Content
+            </h2>
 
-
-                <p>
-
-                    <button
-                        type="submit"
-                        name="cem_update_campaign"
-                        class="button button-primary"
-                    >
-                        Save Campaign
-                    </button>
-
-                </p>
-
-            </form>
-
-
-            <hr>
-
-
-                <h2>
-                    Email Content
-                </h2>
-
-                <div
+            <div
                     style="
                         background:#fff;
                         border:1px solid #dcdcde;
@@ -2140,62 +2121,82 @@ function cem_render_campaign_editor($campaign_id) {
                     ?>
 
                 </div>
-                <div
-    style="
-        margin-top:20px;
-        padding:20px;
-        background:#f6f7f7;
-        border:1px solid #dcdcde;
-    "
->
+            <div
+                style="
+                    margin-top:20px;
+                    padding:20px;
+                    background:#f6f7f7;
+                    border:1px solid #dcdcde;
+                "
+            >
 
-    <h3>
-        Test Email
-    </h3>
+                <h3>
+                    Test Email
+                </h3>
 
-    <p>
-        Send this campaign to one email address for testing.
-        This will not send to your campaign recipients.
-    </p>
+                <p>
+                    Send this campaign to one email address for testing.
+                    This will not send to your campaign recipients.
+                </p>
 
-    <form method="post">
+                <form method="post">
 
-        <?php
+                    <?php
 
-        wp_nonce_field(
-            'cem_send_test_email_action',
-            'cem_send_test_email_nonce'
-        );
+                    wp_nonce_field(
+                        'cem_send_test_email_action',
+                        'cem_send_test_email_nonce'
+                    );
 
-        ?>
+                    ?>
 
-        <input
-            type="hidden"
-            name="campaign_id"
-            value="<?php echo esc_attr(
-                $campaign->id
-            ); ?>"
-        >
+                    <input
+                        type="hidden"
+                        name="campaign_id"
+                        value="<?php echo esc_attr(
+                            $campaign->id
+                        ); ?>"
+                    >
 
-        <input
-            type="email"
-            name="test_email"
-            placeholder="your@email.com"
-            required
-            style="width:350px;"
-        >
+                    <input
+                        type="email"
+                        name="test_email"
+                        placeholder="your@email.com"
+                        required
+                        style="width:350px;"
+                    >
 
-        <button
-            type="submit"
-            name="cem_send_test_email"
-            class="button"
-        >
-            Send Test Email
-        </button>
+                    <button
+                        type="submit"
+                        name="cem_send_test_email"
+                        class="button"
+                    >
+                        Send Test Email
+                    </button>
 
-    </form>
+                </form>
 
-</div>
+            </div>
+
+
+                <p>
+
+                    <button
+                        type="submit"
+                        name="cem_update_campaign"
+                        class="button button-primary"
+                    >
+                        Save Campaign
+                    </button>
+
+                </p>
+
+            </form>
+
+
+            <hr>
+
+            
 
 
             <div
