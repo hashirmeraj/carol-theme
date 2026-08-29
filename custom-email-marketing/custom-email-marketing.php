@@ -12,6 +12,7 @@ if (!defined('ABSPATH')) {
 
 require_once plugin_dir_path(__FILE__) . 'includes/elementor-integration.php';
 require_once plugin_dir_path(__FILE__) . 'includes/admin-contacts.php';
+require_once plugin_dir_path(__FILE__) . 'includes/admin-lists.php';
 /**
  * Create custom email marketing database tables.
  */
