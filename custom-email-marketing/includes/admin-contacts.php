@@ -38,11 +38,217 @@ function cem_handle_contact_actions() {
         return;
     }
 
-    if (!isset($_GET['page']) || $_GET['page'] !== 'cem-contacts') {
+    if (
+        !isset($_GET['page']) ||
+        $_GET['page'] !== 'cem-contacts'
+    ) {
         return;
     }
 
-    if (!isset($_GET['action'], $_GET['contact_id'])) {
+    /*
+     * Handle list membership update.
+     */
+    if (
+        isset($_POST['cem_save_memberships']) &&
+        check_admin_referer(
+            'cem_save_memberships_action',
+            'cem_memberships_nonce'
+        )
+    ) {
+
+        $contact_id = isset($_POST['contact_id'])
+            ? absint($_POST['contact_id'])
+            : 0;
+
+        if (!$contact_id) {
+            return;
+        }
+
+        global $wpdb;
+
+        $contact_lists_table =
+            $wpdb->prefix . 'em_contact_lists';
+
+        $lists_table =
+            $wpdb->prefix . 'em_lists';
+
+        $contacts_table =
+            $wpdb->prefix . 'em_contacts';
+
+        /*
+         * Make sure contact exists.
+         */
+        $contact_exists = $wpdb->get_var(
+            $wpdb->prepare(
+                "SELECT id
+                 FROM $contacts_table
+                 WHERE id = %d
+                 LIMIT 1",
+                $contact_id
+            )
+        );
+
+        if (!$contact_exists) {
+            return;
+        }
+
+        /*
+         * Selected lists.
+         */
+        $selected_lists = isset($_POST['list_ids'])
+            ? array_map(
+                'absint',
+                (array) wp_unslash($_POST['list_ids'])
+            )
+            : array();
+
+        /*
+         * Get all active lists.
+         */
+        $all_lists = $wpdb->get_results(
+            "SELECT id
+             FROM $lists_table
+             WHERE status = 'active'"
+        );
+
+        $now = current_time('mysql');
+
+        /*
+         * Update each list membership.
+         */
+        foreach ($all_lists as $list) {
+
+            $list_id = (int) $list->id;
+
+            $is_selected =
+                in_array(
+                    $list_id,
+                    $selected_lists,
+                    true
+                );
+
+            /*
+             * Check existing relationship.
+             */
+            $relationship = $wpdb->get_row(
+                $wpdb->prepare(
+                    "SELECT *
+                     FROM $contact_lists_table
+                     WHERE contact_id = %d
+                     AND list_id = %d
+                     LIMIT 1",
+                    $contact_id,
+                    $list_id
+                )
+            );
+
+            if ($is_selected) {
+
+                /*
+                 * Subscribe.
+                 */
+                if ($relationship) {
+
+                    $wpdb->update(
+                        $contact_lists_table,
+                        array(
+                            'status'          => 'subscribed',
+                            'subscribed_at'   => $relationship->subscribed_at
+                                ?: $now,
+                            'unsubscribed_at' => null,
+                            'updated_at'      => $now,
+                        ),
+                        array(
+                            'id' => $relationship->id,
+                        ),
+                        array(
+                            '%s',
+                            '%s',
+                            '%s',
+                            '%s',
+                        ),
+                        array(
+                            '%d',
+                        )
+                    );
+
+                } else {
+
+                    $wpdb->insert(
+                        $contact_lists_table,
+                        array(
+                            'contact_id'    => $contact_id,
+                            'list_id'       => $list_id,
+                            'status'        => 'subscribed',
+                            'subscribed_at' => $now,
+                            'created_at'    => $now,
+                            'updated_at'    => $now,
+                        ),
+                        array(
+                            '%d',
+                            '%d',
+                            '%s',
+                            '%s',
+                            '%s',
+                            '%s',
+                        )
+                    );
+                }
+
+            } else {
+
+                /*
+                 * Remove from list.
+                 *
+                 * We keep the relationship and mark it
+                 * as unsubscribed rather than deleting it.
+                 */
+                if ($relationship) {
+
+                    $wpdb->update(
+                        $contact_lists_table,
+                        array(
+                            'status'          => 'unsubscribed',
+                            'unsubscribed_at' => $now,
+                            'updated_at'      => $now,
+                        ),
+                        array(
+                            'id' => $relationship->id,
+                        ),
+                        array(
+                            '%s',
+                            '%s',
+                            '%s',
+                        ),
+                        array(
+                            '%d',
+                        )
+                    );
+                }
+            }
+        }
+
+        wp_safe_redirect(
+            add_query_arg(
+                array(
+                    'page'       => 'cem-contacts',
+                    'contact_id' => $contact_id,
+                    'updated'    => 'memberships',
+                ),
+                admin_url('admin.php')
+            )
+        );
+
+        exit;
+    }
+
+
+    /*
+     * No contact action.
+     */
+    if (
+        !isset($_GET['action'], $_GET['contact_id'])
+    ) {
         return;
     }
 
@@ -60,18 +266,31 @@ function cem_handle_contact_actions() {
      * Verify nonce.
      */
     $nonce = isset($_GET['_wpnonce'])
-        ? sanitize_text_field(wp_unslash($_GET['_wpnonce']))
+        ? sanitize_text_field(
+            wp_unslash($_GET['_wpnonce'])
+        )
         : '';
 
-    if (!wp_verify_nonce($nonce, 'cem_contact_action_' . $contact_id)) {
+    if (
+        !wp_verify_nonce(
+            $nonce,
+            'cem_contact_action_' . $contact_id
+        )
+    ) {
         wp_die('Security check failed.');
     }
 
     global $wpdb;
 
-    $contacts_table = $wpdb->prefix . 'em_contacts';
-    $lists_table = $wpdb->prefix . 'em_lists';
-    $contact_lists_table = $wpdb->prefix . 'em_contact_lists';
+    $contacts_table =
+        $wpdb->prefix . 'em_contacts';
+
+    $lists_table =
+        $wpdb->prefix . 'em_lists';
+
+    $contact_lists_table =
+        $wpdb->prefix . 'em_contact_lists';
+
 
     /*
      * Unsubscribe contact.
@@ -97,7 +316,7 @@ function cem_handle_contact_actions() {
         );
 
         /*
-         * Mark all list memberships as unsubscribed.
+         * Unsubscribe from all lists.
          */
         $wpdb->update(
             $contact_lists_table,
@@ -134,9 +353,7 @@ function cem_handle_contact_actions() {
 
 
     /*
-     * Manually resubscribe contact.
-     *
-     * This is an admin action only.
+     * Resubscribe contact.
      */
     if ($action === 'resubscribe') {
 
@@ -161,7 +378,7 @@ function cem_handle_contact_actions() {
         );
 
         /*
-         * Find Newsletter list.
+         * Newsletter list.
          */
         $list_id = $wpdb->get_var(
             $wpdb->prepare(
@@ -250,12 +467,12 @@ function cem_handle_contact_actions() {
 
 
     /*
-     * Permanently delete contact.
+     * Delete contact.
      */
     if ($action === 'delete') {
 
         /*
-         * Delete list relationships first.
+         * Delete relationships first.
          */
         $wpdb->delete(
             $contact_lists_table,
@@ -306,10 +523,11 @@ function cem_render_contacts_page() {
 
     global $wpdb;
 
-    $contacts_table = $wpdb->prefix . 'em_contacts';
+    $contacts_table =
+        $wpdb->prefix . 'em_contacts';
 
     /*
-     * Check if viewing a specific contact.
+     * Specific contact.
      */
     $contact_id = isset($_GET['contact_id'])
         ? absint($_GET['contact_id'])
@@ -332,20 +550,20 @@ function cem_render_contacts_page() {
         ? max(1, absint($_GET['paged']))
         : 1;
 
-    $offset = ($current_page - 1) * $per_page;
+    $offset =
+        ($current_page - 1) * $per_page;
 
 
     /*
      * Search.
      */
     $search = isset($_GET['s'])
-        ? sanitize_text_field(wp_unslash($_GET['s']))
+        ? sanitize_text_field(
+            wp_unslash($_GET['s'])
+        )
         : '';
 
 
-    /*
-     * Build WHERE.
-     */
     $where = 'WHERE 1=1';
 
     $query_values = array();
@@ -355,7 +573,9 @@ function cem_render_contacts_page() {
         $where .= ' AND email LIKE %s';
 
         $query_values[] =
-            '%' . $wpdb->esc_like($search) . '%';
+            '%' .
+            $wpdb->esc_like($search) .
+            '%';
     }
 
 
@@ -379,9 +599,8 @@ function cem_render_contacts_page() {
 
     } else {
 
-        $total_contacts = $wpdb->get_var(
-            $count_sql
-        );
+        $total_contacts =
+            $wpdb->get_var($count_sql);
     }
 
 
@@ -416,9 +635,11 @@ function cem_render_contacts_page() {
     );
 
 
-    $total_pages = ceil(
-        $total_contacts / $per_page
-    );
+    $total_pages =
+        ceil(
+            $total_contacts /
+            $per_page
+        );
 
     ?>
 
@@ -432,12 +653,14 @@ function cem_render_contacts_page() {
 
         <?php cem_display_contact_notice(); ?>
 
-        <div style="margin: 20px 0;">
+        <div style="margin:20px 0;">
 
             <strong>
                 <?php
                 echo esc_html(
-                    number_format_i18n($total_contacts)
+                    number_format_i18n(
+                        $total_contacts
+                    )
                 );
                 ?>
             </strong>
@@ -489,7 +712,7 @@ function cem_render_contacts_page() {
 
         </form>
 
-        <div style="clear: both;"></div>
+        <div style="clear:both;"></div>
 
 
         <!-- Contacts table -->
@@ -500,12 +723,16 @@ function cem_render_contacts_page() {
 
                 <tr>
 
-                    <th style="width: 50px;">
+                    <th style="width:50px;">
                         ID
                     </th>
 
                     <th>
                         Email
+                    </th>
+
+                    <th>
+                        Lists
                     </th>
 
                     <th>
@@ -534,11 +761,38 @@ function cem_render_contacts_page() {
 
                     <?php foreach ($contacts as $contact): ?>
 
+                        <?php
+
+                        /*
+                         * Get subscribed lists.
+                         */
+                        $contact_lists = $wpdb->get_col(
+                            $wpdb->prepare(
+                                "
+                                SELECT l.name
+                                FROM {$wpdb->prefix}em_lists l
+                                INNER JOIN {$wpdb->prefix}em_contact_lists cl
+                                    ON l.id = cl.list_id
+                                WHERE cl.contact_id = %d
+                                AND cl.status = 'subscribed'
+                                ORDER BY l.name ASC
+                                ",
+                                $contact->id
+                            )
+                        );
+
+                        ?>
+
                         <tr>
 
                             <td>
-                                <?php echo esc_html($contact->id); ?>
+                                <?php
+                                echo esc_html(
+                                    $contact->id
+                                );
+                                ?>
                             </td>
+
 
                             <td>
 
@@ -555,36 +809,74 @@ function cem_render_contacts_page() {
                                             )
                                         ); ?>"
                                     >
+
                                         <?php
                                         echo esc_html(
                                             $contact->email
                                         );
                                         ?>
+
                                     </a>
 
                                 </strong>
 
                             </td>
 
+
                             <td>
+
+                                <?php if (!empty($contact_lists)): ?>
+
+                                    <?php
+                                    echo esc_html(
+                                        implode(
+                                            ', ',
+                                            $contact_lists
+                                        )
+                                    );
+                                    ?>
+
+                                <?php else: ?>
+
+                                    —
+
+                                <?php endif; ?>
+
+                            </td>
+
+
+                            <td>
+
                                 <?php
                                 echo esc_html(
                                     $contact->source ?: '—'
                                 );
                                 ?>
+
                             </td>
+
 
                             <td>
 
                                 <?php if ($contact->status === 'active'): ?>
 
-                                    <span style="color:#008a20;font-weight:600;">
+                                    <span
+                                        style="
+                                            color:#008a20;
+                                            font-weight:600;
+                                        "
+                                    >
                                         Active
                                     </span>
 
                                 <?php elseif ($contact->status === 'unsubscribed'): ?>
 
-                                    <span style="color:#b32d2e;font-weight:600;">
+                                    <span
+                                        style="
+                                            color:#b32d2e;
+                                            font-weight:600;
+                                        "
+                                    >
                                         Unsubscribed
                                     </span>
 
@@ -602,17 +894,22 @@ function cem_render_contacts_page() {
 
                             </td>
 
+
                             <td>
 
                                 <?php if ((int) $contact->marketing_consent === 1): ?>
 
-                                    <span style="color:#008a20;">
+                                    <span
+                                        style="color:#008a20;"
+                                    >
                                         Yes
                                     </span>
 
                                 <?php else: ?>
 
-                                    <span style="color:#b32d2e;">
+                                    <span
+                                        style="color:#b32d2e;"
+                                    >
                                         No
                                     </span>
 
@@ -620,13 +917,18 @@ function cem_render_contacts_page() {
 
                             </td>
 
+
                             <td>
 
                                 <?php
-                                echo !empty($contact->consent_at)
+                                echo !empty(
+                                    $contact->consent_at
+                                )
                                     ? esc_html(
                                         wp_date(
-                                            get_option('date_format'),
+                                            get_option(
+                                                'date_format'
+                                            ),
                                             strtotime(
                                                 $contact->consent_at
                                             )
@@ -646,8 +948,11 @@ function cem_render_contacts_page() {
                     <tr>
 
                         <td
-                            colspan="6"
-                            style="text-align:center;padding:30px;"
+                            colspan="7"
+                            style="
+                                text-align:center;
+                                padding:30px;
+                            "
                         >
                             No contacts found.
                         </td>
@@ -671,15 +976,20 @@ function cem_render_contacts_page() {
 
                     echo paginate_links(
                         array(
-                            'base' => add_query_arg(
-                                'paged',
-                                '%#%'
-                            ),
+                            'base' =>
+                                add_query_arg(
+                                    'paged',
+                                    '%#%'
+                                ),
                             'format' => '',
-                            'current' => $current_page,
-                            'total' => $total_pages,
-                            'prev_text' => '&laquo;',
-                            'next_text' => '&raquo;',
+                            'current' =>
+                                $current_page,
+                            'total' =>
+                                $total_pages,
+                            'prev_text' =>
+                                '&laquo;',
+                            'next_text' =>
+                                '&raquo;',
                         )
                     );
 
@@ -700,21 +1010,37 @@ function cem_render_contacts_page() {
 /**
  * Contact details page.
  */
-function cem_render_contact_details($contact_id) {
+function cem_render_contact_details(
+    $contact_id
+) {
 
     global $wpdb;
 
-    $contacts_table = $wpdb->prefix . 'em_contacts';
+    $contacts_table =
+        $wpdb->prefix . 'em_contacts';
 
+    $lists_table =
+        $wpdb->prefix . 'em_lists';
+
+    $contact_lists_table =
+        $wpdb->prefix . 'em_contact_lists';
+
+
+    /*
+     * Get contact.
+     */
     $contact = $wpdb->get_row(
         $wpdb->prepare(
-            "SELECT *
-             FROM $contacts_table
-             WHERE id = %d
-             LIMIT 1",
+            "
+            SELECT *
+            FROM $contacts_table
+            WHERE id = %d
+            LIMIT 1
+            ",
             $contact_id
         )
     );
+
 
     if (!$contact) {
 
@@ -726,6 +1052,54 @@ function cem_render_contact_details($contact_id) {
         return;
     }
 
+
+    /*
+     * Get all active lists.
+     */
+    $lists = $wpdb->get_results(
+        "
+        SELECT
+            id,
+            name,
+            description
+        FROM $lists_table
+        WHERE status = 'active'
+        ORDER BY
+            CASE
+                WHEN name = 'Newsletter'
+                THEN 0
+                ELSE 1
+            END,
+            name ASC
+        "
+    );
+
+
+    /*
+     * Get subscribed list IDs.
+     */
+    $subscribed_list_ids = $wpdb->get_col(
+        $wpdb->prepare(
+            "
+            SELECT list_id
+            FROM $contact_lists_table
+            WHERE contact_id = %d
+            AND status = 'subscribed'
+            ",
+            $contact_id
+        )
+    );
+
+    $subscribed_list_ids =
+        array_map(
+            'intval',
+            $subscribed_list_ids
+        );
+
+
+    /*
+     * Back URL.
+     */
     $back_url = add_query_arg(
         array(
             'page' => 'cem-contacts',
@@ -741,6 +1115,7 @@ function cem_render_contact_details($contact_id) {
             Contact Details
         </h1>
 
+
         <p>
 
             <a href="<?php echo esc_url($back_url); ?>">
@@ -749,15 +1124,19 @@ function cem_render_contact_details($contact_id) {
 
         </p>
 
+
         <?php cem_display_contact_notice(); ?>
+
+
+        <!-- Contact information -->
 
         <div
             style="
-                max-width: 800px;
-                background: #fff;
-                border: 1px solid #dcdcde;
-                padding: 25px;
-                margin-top: 20px;
+                max-width:800px;
+                background:#fff;
+                border:1px solid #dcdcde;
+                padding:25px;
+                margin-top:20px;
             "
         >
 
@@ -770,6 +1149,7 @@ function cem_render_contact_details($contact_id) {
                     </th>
 
                     <td>
+
                         <strong>
                             <?php
                             echo esc_html(
@@ -777,9 +1157,11 @@ function cem_render_contact_details($contact_id) {
                             );
                             ?>
                         </strong>
+
                     </td>
 
                 </tr>
+
 
                 <tr>
 
@@ -791,29 +1173,32 @@ function cem_render_contact_details($contact_id) {
 
                         <?php if ($contact->status === 'active'): ?>
 
-                            <span style="color:#008a20;font-weight:600;">
+                            <span
+                                style="
+                                    color:#008a20;
+                                    font-weight:600;
+                                "
+                            >
                                 Active
                             </span>
 
                         <?php elseif ($contact->status === 'unsubscribed'): ?>
 
-                            <span style="color:#b32d2e;font-weight:600;">
+                            <span
+                                style="
+                                    color:#b32d2e;
+                                    font-weight:600;
+                                "
+                            >
                                 Unsubscribed
                             </span>
-
-                        <?php else: ?>
-
-                            <?php
-                            echo esc_html(
-                                ucfirst($contact->status)
-                            );
-                            ?>
 
                         <?php endif; ?>
 
                     </td>
 
                 </tr>
+
 
                 <tr>
 
@@ -831,6 +1216,7 @@ function cem_render_contact_details($contact_id) {
 
                 </tr>
 
+
                 <tr>
 
                     <th>
@@ -839,13 +1225,15 @@ function cem_render_contact_details($contact_id) {
 
                     <td>
                         <?php
-                        echo (int) $contact->marketing_consent === 1
+                        echo (int)
+                            $contact->marketing_consent === 1
                             ? 'Yes'
                             : 'No';
                         ?>
                     </td>
 
                 </tr>
+
 
                 <tr>
 
@@ -855,7 +1243,9 @@ function cem_render_contact_details($contact_id) {
 
                     <td>
                         <?php
-                        echo !empty($contact->consent_at)
+                        echo !empty(
+                            $contact->consent_at
+                        )
                             ? esc_html(
                                 $contact->consent_at
                             )
@@ -864,6 +1254,7 @@ function cem_render_contact_details($contact_id) {
                     </td>
 
                 </tr>
+
 
                 <tr>
 
@@ -881,6 +1272,7 @@ function cem_render_contact_details($contact_id) {
 
                 </tr>
 
+
                 <tr>
 
                     <th>
@@ -896,6 +1288,7 @@ function cem_render_contact_details($contact_id) {
                     </td>
 
                 </tr>
+
 
                 <tr>
 
@@ -919,14 +1312,136 @@ function cem_render_contact_details($contact_id) {
             <hr>
 
 
+            <!-- List memberships -->
+
+            <h2>
+                Lists
+            </h2>
+
+            <?php if (!empty($lists)): ?>
+
+                <form method="post">
+
+                    <?php
+
+                    wp_nonce_field(
+                        'cem_save_memberships_action',
+                        'cem_memberships_nonce'
+                    );
+
+                    ?>
+
+                    <input
+                        type="hidden"
+                        name="contact_id"
+                        value="<?php echo esc_attr($contact->id); ?>"
+                    >
+
+
+                    <div
+                        style="
+                            background:#f6f7f7;
+                            border:1px solid #dcdcde;
+                            padding:15px;
+                            max-width:600px;
+                        "
+                    >
+
+                        <?php foreach ($lists as $list): ?>
+
+                            <label
+                                style="
+                                    display:block;
+                                    margin-bottom:12px;
+                                "
+                            >
+
+                                <input
+                                    type="checkbox"
+                                    name="list_ids[]"
+                                    value="<?php echo esc_attr($list->id); ?>"
+                                    <?php
+                                    checked(
+                                        in_array(
+                                            (int) $list->id,
+                                            $subscribed_list_ids,
+                                            true
+                                        )
+                                    );
+                                    ?>
+                                >
+
+                                <strong>
+                                    <?php
+                                    echo esc_html(
+                                        $list->name
+                                    );
+                                    ?>
+                                </strong>
+
+                                <?php if (!empty($list->description)): ?>
+
+                                    <span
+                                        style="
+                                            color:#646970;
+                                            margin-left:5px;
+                                        "
+                                    >
+                                        —
+                                        <?php
+                                        echo esc_html(
+                                            $list->description
+                                        );
+                                        ?>
+                                    </span>
+
+                                <?php endif; ?>
+
+                            </label>
+
+                        <?php endforeach; ?>
+
+                    </div>
+
+
+                    <p>
+
+                        <button
+                            type="submit"
+                            name="cem_save_memberships"
+                            class="button button-primary"
+                        >
+                            Save List Memberships
+                        </button>
+
+                    </p>
+
+                </form>
+
+            <?php else: ?>
+
+                <p>
+                    No active lists available.
+                </p>
+
+            <?php endif; ?>
+
+
+            <hr>
+
+
+            <!-- Contact actions -->
+
             <h2>
                 Contact Actions
             </h2>
 
+
             <?php
 
             $action_nonce = wp_create_nonce(
-                'cem_contact_action_' . $contact->id
+                'cem_contact_action_' .
+                $contact->id
             );
 
             ?>
@@ -939,10 +1454,14 @@ function cem_render_contact_details($contact_id) {
                     href="<?php echo esc_url(
                         add_query_arg(
                             array(
-                                'page'       => 'cem-contacts',
-                                'contact_id' => $contact->id,
-                                'action'     => 'unsubscribe',
-                                '_wpnonce'   => $action_nonce,
+                                'page' =>
+                                    'cem-contacts',
+                                'contact_id' =>
+                                    $contact->id,
+                                'action' =>
+                                    'unsubscribe',
+                                '_wpnonce' =>
+                                    $action_nonce,
                             ),
                             admin_url('admin.php')
                         )
@@ -959,10 +1478,14 @@ function cem_render_contact_details($contact_id) {
                     href="<?php echo esc_url(
                         add_query_arg(
                             array(
-                                'page'       => 'cem-contacts',
-                                'contact_id' => $contact->id,
-                                'action'     => 'resubscribe',
-                                '_wpnonce'   => $action_nonce,
+                                'page' =>
+                                    'cem-contacts',
+                                'contact_id' =>
+                                    $contact->id,
+                                'action' =>
+                                    'resubscribe',
+                                '_wpnonce' =>
+                                    $action_nonce,
                             ),
                             admin_url('admin.php')
                         )
@@ -977,14 +1500,21 @@ function cem_render_contact_details($contact_id) {
 
             <a
                 class="button"
-                style="color:#b32d2e;border-color:#b32d2e;"
+                style="
+                    color:#b32d2e;
+                    border-color:#b32d2e;
+                "
                 href="<?php echo esc_url(
                     add_query_arg(
                         array(
-                            'page'       => 'cem-contacts',
-                            'contact_id' => $contact->id,
-                            'action'     => 'delete',
-                            '_wpnonce'   => $action_nonce,
+                            'page' =>
+                                'cem-contacts',
+                            'contact_id' =>
+                                $contact->id,
+                            'action' =>
+                                'delete',
+                            '_wpnonce' =>
+                                $action_nonce,
                         ),
                         admin_url('admin.php')
                     )
@@ -1003,7 +1533,7 @@ function cem_render_contact_details($contact_id) {
 
 
 /**
- * Display action notices.
+ * Display notices.
  */
 function cem_display_contact_notice() {
 
@@ -1016,9 +1546,17 @@ function cem_display_contact_notice() {
     );
 
     $messages = array(
-        'unsubscribed' => 'Contact unsubscribed successfully.',
-        'resubscribed' => 'Contact resubscribed successfully.',
-        'deleted'      => 'Contact deleted successfully.',
+        'unsubscribed' =>
+            'Contact unsubscribed successfully.',
+
+        'resubscribed' =>
+            'Contact resubscribed successfully.',
+
+        'deleted' =>
+            'Contact deleted successfully.',
+
+        'memberships' =>
+            'List memberships updated successfully.',
     );
 
     if (!isset($messages[$updated])) {
@@ -1030,7 +1568,11 @@ function cem_display_contact_notice() {
     <div class="notice notice-success is-dismissible">
 
         <p>
-            <?php echo esc_html($messages[$updated]); ?>
+            <?php
+            echo esc_html(
+                $messages[$updated]
+            );
+            ?>
         </p>
 
     </div>
