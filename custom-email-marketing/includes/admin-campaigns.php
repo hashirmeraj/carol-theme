@@ -286,6 +286,11 @@ function cem_handle_campaign_actions() {
                 wp_unslash($_POST['reply_to'])
             )
             : '';
+        $html_content = isset($_POST['html_content'])
+    ? wp_kses_post(
+        wp_unslash($_POST['html_content'])
+    )
+    : '';    
 
         $campaign_type = isset($_POST['campaign_type'])
             ? sanitize_key(
@@ -384,28 +389,30 @@ function cem_handle_campaign_actions() {
                 $updated = $wpdb->update(
                     $campaigns_table,
                     array(
-                        'name'          => $name,
-                        'subject'       => $subject,
-                        'from_name'     => $from_name,
-                        'from_email'    => $from_email,
-                        'reply_to'      => $reply_to,
-                        'campaign_type' => $campaign_type,
-                        'list_id'       => $list_id,
-                        'updated_at'    => current_time('mysql'),
-                    ),
+    'name'          => $name,
+    'subject'       => $subject,
+    'from_name'     => $from_name,
+    'from_email'    => $from_email,
+    'reply_to'      => $reply_to,
+    'campaign_type' => $campaign_type,
+    'list_id'       => $list_id,
+    'html_content'  => $html_content,
+    'updated_at'    => current_time('mysql'),
+),
                     array(
                         'id' => $campaign_id,
                     ),
                     array(
-                        '%s',
-                        '%s',
-                        '%s',
-                        '%s',
-                        '%s',
-                        '%s',
-                        '%d',
-                        '%s',
-                    ),
+    '%s',
+    '%s',
+    '%s',
+    '%s',
+    '%s',
+    '%s',
+    '%d',
+    '%s',
+    '%s',
+),
                     array(
                         '%d',
                     )
@@ -1956,9 +1963,38 @@ function cem_render_campaign_editor($campaign_id) {
             <hr>
 
 
-            <h2>
-                Email Content
-            </h2>
+                <h2>
+                    Email Content
+                </h2>
+
+                <div
+                    style="
+                        background:#fff;
+                        border:1px solid #dcdcde;
+                        padding:20px;
+                    "
+                >
+
+                    <?php
+
+                    $editor_settings = array(
+                        'textarea_name' => 'html_content',
+                        'textarea_rows' => 15,
+                        'media_buttons' => true,
+                        'teeny'         => false,
+                        'quicktags'     => true,
+                        'tinymce'       => true,
+                    );
+
+                    wp_editor(
+                        $campaign->html_content,
+                        'cem_email_content_' . $campaign->id,
+                        $editor_settings
+                    );
+
+                    ?>
+
+                </div>
 
 
             <div
