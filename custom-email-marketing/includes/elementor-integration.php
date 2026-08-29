@@ -152,36 +152,56 @@ function cem_capture_elementor_newsletter($record, $handler) {
 
     } else {
 
-        /*
-         * Existing contact.
-         *
-         * Re-activate the contact and update
-         * subscription timestamp.
-         */
-        $wpdb->update(
-            $contacts_table,
-            array(
-                'status'             => 'active',
-                'marketing_consent'  => 1,
-                'consent_at'         => $now,
-                'consent_ip'         => $ip,
-                'updated_at'         => $now,
-            ),
-            array(
-                'id' => $contact_id,
-            ),
-            array(
-                '%s',
-                '%d',
-                '%s',
-                '%s',
-                '%s',
-            ),
-            array(
-                '%d',
-            )
-        );
+    /*
+     * Check current contact status.
+     */
+    $contact_status = $wpdb->get_var(
+        $wpdb->prepare(
+            "SELECT status
+             FROM $contacts_table
+             WHERE id = %d
+             LIMIT 1",
+            $contact_id
+        )
+    );
+
+    /*
+     * If the contact previously unsubscribed,
+     * do not automatically subscribe them again.
+     */
+    if ($contact_status === 'unsubscribed') {
+        return;
     }
+
+    /*
+     * Existing active contact.
+     *
+     * Refresh consent information.
+     */
+    $wpdb->update(
+        $contacts_table,
+        array(
+            'status'            => 'active',
+            'marketing_consent' => 1,
+            'consent_at'        => $now,
+            'consent_ip'        => $ip,
+            'updated_at'        => $now,
+        ),
+        array(
+            'id' => $contact_id,
+        ),
+        array(
+            '%s',
+            '%d',
+            '%s',
+            '%s',
+            '%s',
+        ),
+        array(
+            '%d',
+        )
+    );
+}
 
     /*
      * Find Newsletter list.
