@@ -97,6 +97,10 @@ function cem_handle_campaign_actions() {
             )
             : 'newsletter';
 
+        $list_id = isset($_POST['list_id'])
+            ? absint($_POST['list_id'])
+            : 0;
+
         /*
          * Validation.
          */
@@ -130,6 +134,15 @@ function cem_handle_campaign_actions() {
                 'error'
             );
 
+        } elseif (!$list_id) {
+
+            add_settings_error(
+                'cem_campaigns',
+                'campaign_list',
+                'Please select a mailing list.',
+                'error'
+            );
+
         } else {
 
             $now = current_time('mysql');
@@ -146,6 +159,7 @@ function cem_handle_campaign_actions() {
                     'plain_content' => '',
                     'status'        => 'draft',
                     'campaign_type' => $campaign_type,
+                    'list_id'       => $list_id,
                     'created_at'    => $now,
                     'updated_at'    => $now,
                 ),
@@ -159,6 +173,7 @@ function cem_handle_campaign_actions() {
                     '%s',
                     '%s',
                     '%s',
+                    '%d',
                     '%s',
                 )
             );
