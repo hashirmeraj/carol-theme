@@ -1102,6 +1102,48 @@ function cem_render_campaign_editor($campaign_id) {
             $campaign_id
         )
     );
+    $lists_table = $wpdb->prefix . 'em_lists';
+
+$contact_lists_table =
+    $wpdb->prefix . 'em_contact_lists';
+
+$lists = $wpdb->get_results(
+    "
+    SELECT
+        id,
+        name,
+        description
+    FROM $lists_table
+    WHERE status = 'active'
+    ORDER BY
+        CASE
+            WHEN name = 'Newsletter'
+            THEN 0
+            ELSE 1
+        END,
+        name ASC
+    "
+);
+
+$recipient_count = 0;
+
+if (!empty($campaign->list_id)) {
+
+    $recipient_count = $wpdb->get_var(
+        $wpdb->prepare(
+            "
+            SELECT COUNT(DISTINCT cl.contact_id)
+            FROM $contact_lists_table cl
+            INNER JOIN {$wpdb->prefix}em_contacts c
+                ON c.id = cl.contact_id
+            WHERE cl.list_id = %d
+            AND cl.status = 'subscribed'
+            AND c.status = 'active'
+            ",
+            $campaign->list_id
+        )
+    );
+}
 
 
     if (!$campaign) {
@@ -1330,6 +1372,70 @@ function cem_render_campaign_editor($campaign_id) {
                                 </option>
 
                             </select>
+
+                        </td>
+
+                    </tr>
+
+                    <tr>
+
+                        <th>
+                            <label for="list_id">
+                                Send To
+                            </label>
+                        </th>
+
+                        <td>
+
+                            <select
+                                id="list_id"
+                                name="list_id"
+                                required
+                            >
+
+                                <option value="">
+                                    — Select Mailing List —
+                                </option>
+
+                                <?php foreach ($lists as $list): ?>
+
+                                    <option
+                                        value="<?php echo esc_attr($list->id); ?>"
+                                        <?php selected(
+                                            $campaign->list_id,
+                                            $list->id
+                                        ); ?>
+                                    >
+
+                                        <?php
+                                        echo esc_html($list->name);
+                                        ?>
+
+                                    </option>
+
+                                <?php endforeach; ?>
+
+                            </select>
+
+                            <p class="description">
+                                Select the mailing list for this campaign.
+                            </p>
+
+                            <p>
+
+                                <strong>
+                                    Eligible Recipients:
+                                </strong>
+
+                                <?php
+                                echo esc_html(
+                                    number_format_i18n(
+                                        (int) $recipient_count
+                                    )
+                                );
+                                ?>
+
+                            </p>
 
                         </td>
 
