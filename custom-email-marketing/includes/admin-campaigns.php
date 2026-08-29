@@ -409,7 +409,6 @@ function cem_handle_campaign_actions() {
                         '%s',
                         '%s',
                         '%s',
-                        '%s',
                         '%d',
                         '%s',
                         '%s',
