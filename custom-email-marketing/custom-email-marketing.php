@@ -9,6 +9,9 @@
 if (!defined('ABSPATH')) {
     exit;
 }
+
+require_once plugin_dir_path(__FILE__) . 'includes/elementor-integration.php';
+require_once plugin_dir_path(__FILE__) . 'includes/admin-contacts.php';
 /**
  * Create custom email marketing database tables.
  */
