@@ -653,6 +653,150 @@ if (
     exit;
 }
 
+
+
+
+    /*
+ * SEND CAMPAIGN TEST EMAIL
+ */
+if (
+    isset($_POST['cem_send_test_email']) &&
+    check_admin_referer(
+        'cem_send_test_email_action',
+        'cem_send_test_email_nonce'
+    )
+) {
+
+    $campaign_id = isset($_POST['campaign_id'])
+        ? absint($_POST['campaign_id'])
+        : 0;
+
+    $test_email = isset($_POST['test_email'])
+        ? sanitize_email(
+            wp_unslash($_POST['test_email'])
+        )
+        : '';
+
+
+    if (!$campaign_id) {
+
+        add_settings_error(
+            'cem_campaigns',
+            'invalid_campaign',
+            'Invalid campaign.',
+            'error'
+        );
+
+        return;
+    }
+
+
+    if (!is_email($test_email)) {
+
+        add_settings_error(
+            'cem_campaigns',
+            'invalid_test_email',
+            'Please enter a valid test email address.',
+            'error'
+        );
+
+        return;
+    }
+
+
+    /*
+     * Get campaign.
+     */
+    $campaign = $wpdb->get_row(
+        $wpdb->prepare(
+            "
+            SELECT *
+            FROM $campaigns_table
+            WHERE id = %d
+            LIMIT 1
+            ",
+            $campaign_id
+        )
+    );
+
+
+    if (!$campaign) {
+
+        add_settings_error(
+            'cem_campaigns',
+            'campaign_not_found',
+            'Campaign not found.',
+            'error'
+        );
+
+        return;
+    }
+
+
+    /*
+     * Make sure campaign has content.
+     */
+    if (empty($campaign->html_content)) {
+
+        add_settings_error(
+            'cem_campaigns',
+            'empty_campaign_content',
+            'Please add email content before sending a test email.',
+            'error'
+        );
+
+        return;
+    }
+
+
+    /*
+     * Send through reusable SendLayer function.
+     */
+    $result = cem_send_email_via_sendlayer(
+        $test_email,
+        'Test Recipient',
+        $campaign->subject,
+        $campaign->html_content,
+        '',
+        $campaign->from_email,
+        $campaign->from_name,
+        $campaign->reply_to
+    );
+
+
+    if (!empty($result['success'])) {
+
+        $message = 'Test email sent successfully.';
+
+        if (!empty($result['message_id'])) {
+
+            $message .=
+                ' Message ID: ' .
+                sanitize_text_field(
+                    $result['message_id']
+                );
+        }
+
+        add_settings_error(
+            'cem_campaigns',
+            'test_email_sent',
+            $message,
+            'success'
+        );
+
+    } else {
+
+        add_settings_error(
+            'cem_campaigns',
+            'test_email_failed',
+            !empty($result['message'])
+                ? $result['message']
+                : 'Test email could not be sent.',
+            'error'
+        );
+    }
+}
+
     /*
      * DELETE CAMPAIGN
      */
