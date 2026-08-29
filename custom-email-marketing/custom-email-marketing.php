@@ -13,6 +13,7 @@ if (!defined('ABSPATH')) {
 require_once plugin_dir_path(__FILE__) . 'includes/elementor-integration.php';
 require_once plugin_dir_path(__FILE__) . 'includes/admin-contacts.php';
 require_once plugin_dir_path(__FILE__) . 'includes/admin-lists.php';
+require_once plugin_dir_path(__FILE__) . 'includes/database-campaigns.php';
 /**
  * Create custom email marketing database tables.
  */
@@ -129,6 +130,7 @@ function cem_create_database_tables() {
      * Store database version.
      */
     update_option('cem_db_version', '1.0.0');
+    cem_create_campaign_tables();
 }
 
 register_activation_hook(
