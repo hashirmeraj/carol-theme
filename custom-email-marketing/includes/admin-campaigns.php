@@ -50,6 +50,7 @@ function cem_handle_campaign_actions() {
     $campaigns_table =
         $wpdb->prefix . 'em_campaigns';
 
+
     /*
      * CREATE CAMPAIGN
      */
@@ -101,6 +102,7 @@ function cem_handle_campaign_actions() {
             ? absint($_POST['list_id'])
             : 0;
 
+
         /*
          * Validation.
          */
@@ -145,64 +147,96 @@ function cem_handle_campaign_actions() {
 
         } else {
 
-            $now = current_time('mysql');
+            /*
+             * Make sure selected list exists and is active.
+             */
+            $lists_table =
+                $wpdb->prefix . 'em_lists';
 
-            $inserted = $wpdb->insert(
-                $campaigns_table,
-                array(
-                    'name'          => $name,
-                    'subject'       => $subject,
-                    'from_name'     => $from_name,
-                    'from_email'    => $from_email,
-                    'reply_to'      => $reply_to,
-                    'html_content'  => '',
-                    'plain_content' => '',
-                    'status'        => 'draft',
-                    'campaign_type' => $campaign_type,
-                    'list_id'       => $list_id,
-                    'created_at'    => $now,
-                    'updated_at'    => $now,
-                ),
-                array(
-                    '%s',
-                    '%s',
-                    '%s',
-                    '%s',
-                    '%s',
-                    '%s',
-                    '%s',
-                    '%s',
-                    '%s',
-                    '%d',
-                    '%s',
+            $valid_list = $wpdb->get_var(
+                $wpdb->prepare(
+                    "
+                    SELECT id
+                    FROM $lists_table
+                    WHERE id = %d
+                    AND status = 'active'
+                    LIMIT 1
+                    ",
+                    $list_id
                 )
             );
 
-            if ($inserted) {
-
-                $campaign_id = $wpdb->insert_id;
-
-                wp_safe_redirect(
-                    add_query_arg(
-                        array(
-                            'page'         => 'cem-campaigns',
-                            'campaign_id'  => $campaign_id,
-                            'updated'      => 'created',
-                        ),
-                        admin_url('admin.php')
-                    )
-                );
-
-                exit;
-
-            } else {
+            if (!$valid_list) {
 
                 add_settings_error(
                     'cem_campaigns',
-                    'create_failed',
-                    'Campaign could not be created.',
+                    'invalid_campaign_list',
+                    'The selected mailing list is not valid.',
                     'error'
                 );
+
+            } else {
+
+                $now = current_time('mysql');
+
+                $inserted = $wpdb->insert(
+                    $campaigns_table,
+                    array(
+                        'name'          => $name,
+                        'subject'       => $subject,
+                        'from_name'     => $from_name,
+                        'from_email'    => $from_email,
+                        'reply_to'      => $reply_to,
+                        'html_content'  => '',
+                        'plain_content' => '',
+                        'status'        => 'draft',
+                        'campaign_type' => $campaign_type,
+                        'list_id'       => $list_id,
+                        'created_at'    => $now,
+                        'updated_at'    => $now,
+                    ),
+                    array(
+                        '%s',
+                        '%s',
+                        '%s',
+                        '%s',
+                        '%s',
+                        '%s',
+                        '%s',
+                        '%s',
+                        '%s',
+                        '%d',
+                        '%s',
+                        '%s',
+                    )
+                );
+
+                if ($inserted) {
+
+                    $campaign_id = $wpdb->insert_id;
+
+                    wp_safe_redirect(
+                        add_query_arg(
+                            array(
+                                'page'        => 'cem-campaigns',
+                                'campaign_id' => $campaign_id,
+                                'updated'     => 'created',
+                            ),
+                            admin_url('admin.php')
+                        )
+                    );
+
+                    exit;
+
+                } else {
+
+                    add_settings_error(
+                        'cem_campaigns',
+                        'create_failed',
+                        'Campaign could not be created.',
+                        'error'
+                    );
+                }
             }
         }
     }
@@ -259,6 +293,14 @@ function cem_handle_campaign_actions() {
             )
             : 'newsletter';
 
+        $list_id = isset($_POST['list_id'])
+            ? absint($_POST['list_id'])
+            : 0;
+
+
+        /*
+         * Validation.
+         */
         if (!$campaign_id) {
 
             add_settings_error(
@@ -298,61 +340,101 @@ function cem_handle_campaign_actions() {
                 'error'
             );
 
+        } elseif (!$list_id) {
+
+            add_settings_error(
+                'cem_campaigns',
+                'campaign_list',
+                'Please select a mailing list.',
+                'error'
+            );
+
         } else {
 
-            $updated = $wpdb->update(
-                $campaigns_table,
-                array(
-                    'name'          => $name,
-                    'subject'       => $subject,
-                    'from_name'     => $from_name,
-                    'from_email'    => $from_email,
-                    'reply_to'      => $reply_to,
-                    'campaign_type' => $campaign_type,
-                    'list_id'       => $list_id,
-                    'updated_at'    => current_time('mysql'),
-                ),
-                array(
-                    'id' => $campaign_id,
-                ),
-                array(
-                    '%s',
-                    '%s',
-                    '%s',
-                    '%s',
-                    '%s',
-                    '%s',
-                    '%d',
-                    '%s',
-                ),
-                array(
-                    '%d',
+            /*
+             * Make sure selected list exists and is active.
+             */
+            $lists_table =
+                $wpdb->prefix . 'em_lists';
+
+            $valid_list = $wpdb->get_var(
+                $wpdb->prepare(
+                    "
+                    SELECT id
+                    FROM $lists_table
+                    WHERE id = %d
+                    AND status = 'active'
+                    LIMIT 1
+                    ",
+                    $list_id
                 )
             );
 
-            if ($updated !== false) {
-
-                wp_safe_redirect(
-                    add_query_arg(
-                        array(
-                            'page'        => 'cem-campaigns',
-                            'campaign_id' => $campaign_id,
-                            'updated'     => 'updated',
-                        ),
-                        admin_url('admin.php')
-                    )
-                );
-
-                exit;
-
-            } else {
+            if (!$valid_list) {
 
                 add_settings_error(
                     'cem_campaigns',
-                    'update_failed',
-                    'Campaign could not be updated.',
+                    'invalid_campaign_list',
+                    'The selected mailing list is not valid.',
                     'error'
                 );
+
+            } else {
+
+                $updated = $wpdb->update(
+                    $campaigns_table,
+                    array(
+                        'name'          => $name,
+                        'subject'       => $subject,
+                        'from_name'     => $from_name,
+                        'from_email'    => $from_email,
+                        'reply_to'      => $reply_to,
+                        'campaign_type' => $campaign_type,
+                        'list_id'       => $list_id,
+                        'updated_at'    => current_time('mysql'),
+                    ),
+                    array(
+                        'id' => $campaign_id,
+                    ),
+                    array(
+                        '%s',
+                        '%s',
+                        '%s',
+                        '%s',
+                        '%s',
+                        '%s',
+                        '%d',
+                        '%s',
+                    ),
+                    array(
+                        '%d',
+                    )
+                );
+
+                if ($updated !== false) {
+
+                    wp_safe_redirect(
+                        add_query_arg(
+                            array(
+                                'page'        => 'cem-campaigns',
+                                'campaign_id' => $campaign_id,
+                                'updated'     => 'updated',
+                            ),
+                            admin_url('admin.php')
+                        )
+                    );
+
+                    exit;
+
+                } else {
+
+                    add_settings_error(
+                        'cem_campaigns',
+                        'update_failed',
+                        'Campaign could not be updated.',
+                        'error'
+                    );
+                }
             }
         }
     }
@@ -390,18 +472,22 @@ function cem_handle_campaign_actions() {
             wp_die('Security check failed.');
         }
 
+
         /*
-         * Do not delete a campaign that is currently sending.
+         * Get campaign.
          */
         $campaign = $wpdb->get_row(
             $wpdb->prepare(
-                "SELECT *
-                 FROM $campaigns_table
-                 WHERE id = %d
-                 LIMIT 1",
+                "
+                SELECT *
+                FROM $campaigns_table
+                WHERE id = %d
+                LIMIT 1
+                ",
                 $campaign_id
             )
         );
+
 
         if (!$campaign) {
 
@@ -418,6 +504,10 @@ function cem_handle_campaign_actions() {
             exit;
         }
 
+
+        /*
+         * Do not delete a sending campaign.
+         */
         if ($campaign->status === 'sending') {
 
             wp_safe_redirect(
@@ -433,8 +523,9 @@ function cem_handle_campaign_actions() {
             exit;
         }
 
+
         /*
-         * Delete recipients.
+         * Delete campaign recipients.
          */
         $recipients_table =
             $wpdb->prefix . 'em_campaign_recipients';
@@ -449,8 +540,9 @@ function cem_handle_campaign_actions() {
             )
         );
 
+
         /*
-         * Delete queue records.
+         * Delete email queue records.
          */
         $queue_table =
             $wpdb->prefix . 'em_email_queue';
@@ -465,6 +557,7 @@ function cem_handle_campaign_actions() {
             )
         );
 
+
         /*
          * Delete campaign.
          */
@@ -477,6 +570,7 @@ function cem_handle_campaign_actions() {
                 '%d',
             )
         );
+
 
         wp_safe_redirect(
             add_query_arg(
@@ -506,6 +600,7 @@ function cem_render_campaigns_page() {
 
     $campaigns_table =
         $wpdb->prefix . 'em_campaigns';
+
 
     /*
      * Check edit campaign.
@@ -555,10 +650,8 @@ function cem_render_campaigns_page() {
             href="<?php echo esc_url(
                 add_query_arg(
                     array(
-                        'page' =>
-                            'cem-campaigns',
-                        'create' =>
-                            '1',
+                        'page' => 'cem-campaigns',
+                        'create' => '1',
                     ),
                     admin_url('admin.php')
                 )
@@ -570,7 +663,10 @@ function cem_render_campaigns_page() {
 
         <hr class="wp-header-end">
 
-        <?php cem_display_campaign_notice(); ?>
+        <?php
+        settings_errors('cem_campaigns');
+        cem_display_campaign_notice();
+        ?>
 
 
         <?php if (isset($_GET['create'])): ?>
@@ -689,9 +785,7 @@ function cem_render_campaigns_page() {
 
                                 <?php if ($status === 'draft'): ?>
 
-                                    <span>
-                                        Draft
-                                    </span>
+                                    Draft
 
                                 <?php elseif ($status === 'scheduled'): ?>
 
@@ -748,9 +842,7 @@ function cem_render_campaigns_page() {
                                 <?php
                                 echo esc_html(
                                     wp_date(
-                                        get_option(
-                                            'date_format'
-                                        ),
+                                        get_option('date_format'),
                                         strtotime(
                                             $campaign->created_at
                                         )
@@ -809,7 +901,9 @@ function cem_render_campaigns_page() {
                                     ?>
 
                                     <a
-                                        href="<?php echo esc_url($delete_url); ?>"
+                                        href="<?php echo esc_url(
+                                            $delete_url
+                                        ); ?>"
                                         class="button button-small"
                                         style="
                                             color:#b32d2e;
@@ -839,9 +933,7 @@ function cem_render_campaigns_page() {
                                 padding:30px;
                             "
                         >
-
                             No campaigns yet.
-
                         </td>
 
                     </tr>
@@ -862,6 +954,33 @@ function cem_render_campaigns_page() {
  * Create Campaign form.
  */
 function cem_render_create_campaign_form() {
+
+    global $wpdb;
+
+    $lists_table =
+        $wpdb->prefix . 'em_lists';
+
+
+    /*
+     * Get active lists.
+     */
+    $lists = $wpdb->get_results(
+        "
+        SELECT
+            id,
+            name,
+            description
+        FROM $lists_table
+        WHERE status = 'active'
+        ORDER BY
+            CASE
+                WHEN name = 'Newsletter'
+                THEN 0
+                ELSE 1
+            END,
+            name ASC
+        "
+    );
 
     ?>
 
@@ -1045,6 +1164,55 @@ function cem_render_create_campaign_form() {
 
                 </tr>
 
+
+                <tr>
+
+                    <th>
+                        <label for="list_id">
+                            Send To
+                        </label>
+                    </th>
+
+                    <td>
+
+                        <select
+                            id="list_id"
+                            name="list_id"
+                            required
+                        >
+
+                            <option value="">
+                                — Select Mailing List —
+                            </option>
+
+                            <?php foreach ($lists as $list): ?>
+
+                                <option
+                                    value="<?php echo esc_attr(
+                                        $list->id
+                                    ); ?>"
+                                >
+
+                                    <?php
+                                    echo esc_html(
+                                        $list->name
+                                    );
+                                    ?>
+
+                                </option>
+
+                            <?php endforeach; ?>
+
+                        </select>
+
+                        <p class="description">
+                            Select the mailing list for this campaign.
+                        </p>
+
+                    </td>
+
+                </tr>
+
             </table>
 
 
@@ -1093,6 +1261,10 @@ function cem_render_campaign_editor($campaign_id) {
     $campaigns_table =
         $wpdb->prefix . 'em_campaigns';
 
+
+    /*
+     * Get campaign.
+     */
     $campaign = $wpdb->get_row(
         $wpdb->prepare(
             "
@@ -1104,50 +1276,11 @@ function cem_render_campaign_editor($campaign_id) {
             $campaign_id
         )
     );
-    $lists_table = $wpdb->prefix . 'em_lists';
-
-$contact_lists_table =
-    $wpdb->prefix . 'em_contact_lists';
-
-$lists = $wpdb->get_results(
-    "
-    SELECT
-        id,
-        name,
-        description
-    FROM $lists_table
-    WHERE status = 'active'
-    ORDER BY
-        CASE
-            WHEN name = 'Newsletter'
-            THEN 0
-            ELSE 1
-        END,
-        name ASC
-    "
-);
-
-$recipient_count = 0;
-
-if (!empty($campaign->list_id)) {
-
-    $recipient_count = $wpdb->get_var(
-        $wpdb->prepare(
-            "
-            SELECT COUNT(DISTINCT cl.contact_id)
-            FROM $contact_lists_table cl
-            INNER JOIN {$wpdb->prefix}em_contacts c
-                ON c.id = cl.contact_id
-            WHERE cl.list_id = %d
-            AND cl.status = 'subscribed'
-            AND c.status = 'active'
-            ",
-            $campaign->list_id
-        )
-    );
-}
 
 
+    /*
+     * Validate campaign before using it.
+     */
     if (!$campaign) {
 
         echo '<div class="wrap">';
@@ -1158,6 +1291,69 @@ if (!empty($campaign->list_id)) {
         return;
     }
 
+
+    /*
+     * Tables.
+     */
+    $lists_table =
+        $wpdb->prefix . 'em_lists';
+
+    $contact_lists_table =
+        $wpdb->prefix . 'em_contact_lists';
+
+    $contacts_table =
+        $wpdb->prefix . 'em_contacts';
+
+
+    /*
+     * Get active lists.
+     */
+    $lists = $wpdb->get_results(
+        "
+        SELECT
+            id,
+            name,
+            description
+        FROM $lists_table
+        WHERE status = 'active'
+        ORDER BY
+            CASE
+                WHEN name = 'Newsletter'
+                THEN 0
+                ELSE 1
+            END,
+            name ASC
+        "
+    );
+
+
+    /*
+     * Get eligible recipient count.
+     *
+     * Contact must:
+     * - belong to selected list
+     * - have subscribed list status
+     * - have active contact status
+     */
+    $recipient_count = 0;
+
+    if (!empty($campaign->list_id)) {
+
+        $recipient_count = $wpdb->get_var(
+            $wpdb->prepare(
+                "
+                SELECT COUNT(DISTINCT cl.contact_id)
+                FROM $contact_lists_table cl
+                INNER JOIN $contacts_table c
+                    ON c.id = cl.contact_id
+                WHERE cl.list_id = %d
+                AND cl.status = 'subscribed'
+                AND c.status = 'active'
+                ",
+                $campaign->list_id
+            )
+        );
+    }
 
     ?>
 
@@ -1187,7 +1383,12 @@ if (!empty($campaign->list_id)) {
         </p>
 
 
-        <?php cem_display_campaign_notice(); ?>
+        <?php
+
+        settings_errors('cem_campaigns');
+        cem_display_campaign_notice();
+
+        ?>
 
 
         <div
@@ -1211,10 +1412,13 @@ if (!empty($campaign->list_id)) {
 
                 ?>
 
+
                 <input
                     type="hidden"
                     name="campaign_id"
-                    value="<?php echo esc_attr($campaign->id); ?>"
+                    value="<?php echo esc_attr(
+                        $campaign->id
+                    ); ?>"
                 >
 
 
@@ -1235,7 +1439,9 @@ if (!empty($campaign->list_id)) {
                                 id="campaign_name"
                                 name="campaign_name"
                                 class="large-text"
-                                value="<?php echo esc_attr($campaign->name); ?>"
+                                value="<?php echo esc_attr(
+                                    $campaign->name
+                                ); ?>"
                                 required
                             >
 
@@ -1259,7 +1465,9 @@ if (!empty($campaign->list_id)) {
                                 id="subject"
                                 name="subject"
                                 class="large-text"
-                                value="<?php echo esc_attr($campaign->subject); ?>"
+                                value="<?php echo esc_attr(
+                                    $campaign->subject
+                                ); ?>"
                                 required
                             >
 
@@ -1283,7 +1491,9 @@ if (!empty($campaign->list_id)) {
                                 id="from_name"
                                 name="from_name"
                                 class="regular-text"
-                                value="<?php echo esc_attr($campaign->from_name); ?>"
+                                value="<?php echo esc_attr(
+                                    $campaign->from_name
+                                ); ?>"
                             >
 
                         </td>
@@ -1306,7 +1516,9 @@ if (!empty($campaign->list_id)) {
                                 id="from_email"
                                 name="from_email"
                                 class="regular-text"
-                                value="<?php echo esc_attr($campaign->from_email); ?>"
+                                value="<?php echo esc_attr(
+                                    $campaign->from_email
+                                ); ?>"
                                 required
                             >
 
@@ -1330,7 +1542,9 @@ if (!empty($campaign->list_id)) {
                                 id="reply_to"
                                 name="reply_to"
                                 class="regular-text"
-                                value="<?php echo esc_attr($campaign->reply_to); ?>"
+                                value="<?php echo esc_attr(
+                                    $campaign->reply_to
+                                ); ?>"
                             >
 
                         </td>
@@ -1379,6 +1593,7 @@ if (!empty($campaign->list_id)) {
 
                     </tr>
 
+
                     <tr>
 
                         <th>
@@ -1402,15 +1617,19 @@ if (!empty($campaign->list_id)) {
                                 <?php foreach ($lists as $list): ?>
 
                                     <option
-                                        value="<?php echo esc_attr($list->id); ?>"
-                                        <?php selected(
-                                            $campaign->list_id,
+                                        value="<?php echo esc_attr(
                                             $list->id
+                                        ); ?>"
+                                        <?php selected(
+                                            (int) $campaign->list_id,
+                                            (int) $list->id
                                         ); ?>
                                     >
 
                                         <?php
-                                        echo esc_html($list->name);
+                                        echo esc_html(
+                                            $list->name
+                                        );
                                         ?>
 
                                     </option>
@@ -1419,9 +1638,11 @@ if (!empty($campaign->list_id)) {
 
                             </select>
 
+
                             <p class="description">
                                 Select the mailing list for this campaign.
                             </p>
+
 
                             <p>
 
@@ -1495,6 +1716,7 @@ if (!empty($campaign->list_id)) {
                 Email Content
             </h2>
 
+
             <div
                 style="
                     background:#f6f7f7;
@@ -1535,6 +1757,7 @@ function cem_display_campaign_notice() {
         wp_unslash($_GET['updated'])
     );
 
+
     $messages = array(
         'created' =>
             'Campaign created successfully.',
@@ -1552,9 +1775,11 @@ function cem_display_campaign_notice() {
             'A campaign that is currently sending cannot be deleted.',
     );
 
+
     if (!isset($messages[$updated])) {
         return;
     }
+
 
     $notice_type =
         $updated === 'cannot_delete'
@@ -1563,14 +1788,18 @@ function cem_display_campaign_notice() {
 
     ?>
 
-    <div class="notice notice-<?php echo esc_attr($notice_type); ?> is-dismissible">
+    <div class="notice notice-<?php echo esc_attr(
+        $notice_type
+    ); ?> is-dismissible">
 
         <p>
+
             <?php
             echo esc_html(
                 $messages[$updated]
             );
             ?>
+
         </p>
 
     </div>
