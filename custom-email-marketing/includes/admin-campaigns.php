@@ -389,30 +389,31 @@ function cem_handle_campaign_actions() {
                 $updated = $wpdb->update(
                     $campaigns_table,
                     array(
-    'name'          => $name,
-    'subject'       => $subject,
-    'from_name'     => $from_name,
-    'from_email'    => $from_email,
-    'reply_to'      => $reply_to,
-    'campaign_type' => $campaign_type,
-    'list_id'       => $list_id,
-    'html_content'  => $html_content,
-    'updated_at'    => current_time('mysql'),
-),
+                        'name'          => $name,
+                        'subject'       => $subject,
+                        'from_name'     => $from_name,
+                        'from_email'    => $from_email,
+                        'reply_to'      => $reply_to,
+                        'campaign_type' => $campaign_type,
+                        'list_id'       => $list_id,
+                        'html_content'  => $html_content,
+                        'updated_at'    => current_time('mysql'),
+                    ),
                     array(
                         'id' => $campaign_id,
                     ),
                     array(
-    '%s',
-    '%s',
-    '%s',
-    '%s',
-    '%s',
-    '%s',
-    '%d',
-    '%s',
-    '%s',
-),
+                        '%s',
+                        '%s',
+                        '%s',
+                        '%s',
+                        '%s',
+                        '%s',
+                        '%s',
+                        '%d',
+                        '%s',
+                        '%s',
+                    ),
                     array(
                         '%d',
                     )
@@ -1995,6 +1996,62 @@ function cem_render_campaign_editor($campaign_id) {
                     ?>
 
                 </div>
+                <div
+    style="
+        margin-top:20px;
+        padding:20px;
+        background:#f6f7f7;
+        border:1px solid #dcdcde;
+    "
+>
+
+    <h3>
+        Test Email
+    </h3>
+
+    <p>
+        Send this campaign to one email address for testing.
+        This will not send to your campaign recipients.
+    </p>
+
+    <form method="post">
+
+        <?php
+
+        wp_nonce_field(
+            'cem_send_test_email_action',
+            'cem_send_test_email_nonce'
+        );
+
+        ?>
+
+        <input
+            type="hidden"
+            name="campaign_id"
+            value="<?php echo esc_attr(
+                $campaign->id
+            ); ?>"
+        >
+
+        <input
+            type="email"
+            name="test_email"
+            placeholder="your@email.com"
+            required
+            style="width:350px;"
+        >
+
+        <button
+            type="submit"
+            name="cem_send_test_email"
+            class="button"
+        >
+            Send Test Email
+        </button>
+
+    </form>
+
+</div>
 
 
             <div
@@ -2007,7 +2064,7 @@ function cem_render_campaign_editor($campaign_id) {
 
                 <p>
                     Email designer will be added in the next step.
-                </p>
+                    </p>
 
                 <p>
                     This campaign is currently only a draft.
