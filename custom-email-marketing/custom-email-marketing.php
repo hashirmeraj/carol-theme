@@ -14,6 +14,7 @@ require_once plugin_dir_path(__FILE__) . 'includes/elementor-integration.php';
 require_once plugin_dir_path(__FILE__) . 'includes/admin-contacts.php';
 require_once plugin_dir_path(__FILE__) . 'includes/admin-lists.php';
 require_once plugin_dir_path(__FILE__) . 'includes/database-campaigns.php';
+require_once plugin_dir_path(__FILE__) . 'includes/admin-campaigns.php';
 /**
  * Create custom email marketing database tables.
  */
