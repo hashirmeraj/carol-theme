@@ -656,6 +656,280 @@ if (
 
 
     /*
+     * SEND CAMPAIGN TO RECIPIENTS
+     */
+    if (
+        isset($_POST['cem_send_campaign']) &&
+        check_admin_referer(
+            'cem_send_campaign_action',
+            'cem_send_campaign_nonce'
+        )
+    ) {
+
+        $campaign_id = isset($_POST['campaign_id'])
+            ? absint($_POST['campaign_id'])
+            : 0;
+
+        if (!$campaign_id) {
+            add_settings_error(
+                'cem_campaigns',
+                'invalid_campaign',
+                'Invalid campaign.',
+                'error'
+            );
+            return;
+        }
+
+        $campaign = $wpdb->get_row(
+            $wpdb->prepare(
+                "SELECT * FROM $campaigns_table WHERE id = %d LIMIT 1",
+                $campaign_id
+            )
+        );
+
+        if (!$campaign) {
+            add_settings_error(
+                'cem_campaigns',
+                'campaign_not_found',
+                'Campaign not found.',
+                'error'
+            );
+            return;
+        }
+
+        if ($campaign->status !== 'draft') {
+            add_settings_error(
+                'cem_campaigns',
+                'campaign_already_sent',
+                'Only draft campaigns can be sent.',
+                'error'
+            );
+            return;
+        }
+
+        if (empty($campaign->list_id)) {
+            add_settings_error(
+                'cem_campaigns',
+                'campaign_list_required',
+                'Please select a mailing list first.',
+                'error'
+            );
+            return;
+        }
+
+        if (empty($campaign->subject) || empty($campaign->html_content)) {
+            add_settings_error(
+                'cem_campaigns',
+                'campaign_content_required',
+                'Campaign subject and email content are required.',
+                'error'
+            );
+            return;
+        }
+
+        $recipients_table = $wpdb->prefix . 'em_campaign_recipients';
+        $contacts_table = $wpdb->prefix . 'em_contacts';
+        $queue_table = $wpdb->prefix . 'em_email_queue';
+
+        $recipients = $wpdb->get_results(
+            $wpdb->prepare(
+                "
+                SELECT
+                    cr.id AS campaign_recipient_id,
+                    cr.contact_id,
+                    c.email,
+                    CONCAT(c.first_name, ' ', c.last_name) AS recipient_name
+                FROM $recipients_table cr
+                INNER JOIN $contacts_table c
+                    ON c.id = cr.contact_id
+                WHERE cr.campaign_id = %d
+                AND cr.status = 'pending'
+                AND c.status = 'active'
+                ORDER BY cr.id ASC
+                ",
+                $campaign_id
+            )
+        );
+
+        if (empty($recipients)) {
+            add_settings_error(
+                'cem_campaigns',
+                'no_pending_recipients',
+                'No pending recipients found. Please prepare recipients first.',
+                'warning'
+            );
+            return;
+        }
+
+        $now = current_time('mysql');
+        $sent_count = 0;
+        $failed_count = 0;
+
+        $wpdb->update(
+            $campaigns_table,
+            array(
+                'status'     => 'sending',
+                'started_at' => $now,
+                'updated_at' => $now,
+            ),
+            array('id' => $campaign_id),
+            array('%s', '%s', '%s'),
+            array('%d')
+        );
+
+        foreach ($recipients as $recipient) {
+            $to_name = trim((string) $recipient->recipient_name);
+
+            $queue_inserted = $wpdb->insert(
+                $queue_table,
+                array(
+                    'campaign_id'           => $campaign_id,
+                    'campaign_recipient_id' => $recipient->campaign_recipient_id,
+                    'contact_id'            => $recipient->contact_id,
+                    'to_email'              => $recipient->email,
+                    'to_name'               => $to_name,
+                    'subject'               => $campaign->subject,
+                    'from_email'            => $campaign->from_email,
+                    'from_name'             => $campaign->from_name,
+                    'reply_to'              => $campaign->reply_to,
+                    'html_content'          => $campaign->html_content,
+                    'plain_content'         => $campaign->plain_content,
+                    'status'                => 'processing',
+                    'attempts'              => 1,
+                    'queued_at'             => $now,
+                    'created_at'            => $now,
+                    'updated_at'            => $now,
+                ),
+                array(
+                    '%d', '%d', '%d', '%s', '%s', '%s', '%s', '%s',
+                    '%s', '%s', '%s', '%s', '%d', '%s', '%s', '%s',
+                )
+            );
+
+            if (!$queue_inserted) {
+                $failed_count++;
+                $wpdb->update(
+                    $recipients_table,
+                    array(
+                        'status'        => 'failed',
+                        'failed_at'     => $now,
+                        'error_message' => 'Could not create email queue record.',
+                        'updated_at'    => $now,
+                    ),
+                    array('id' => $recipient->campaign_recipient_id),
+                    array('%s', '%s', '%s', '%s'),
+                    array('%d')
+                );
+                continue;
+            }
+
+            $result = cem_send_email_via_sendlayer(
+                $recipient->email,
+                $to_name,
+                $campaign->subject,
+                $campaign->html_content,
+                $campaign->plain_content,
+                $campaign->from_email,
+                $campaign->from_name,
+                $campaign->reply_to
+            );
+
+            if (!empty($result['success'])) {
+                $sent_count++;
+
+                $wpdb->update(
+                    $queue_table,
+                    array(
+                        'status'     => 'sent',
+                        'sent_at'    => $now,
+                        'updated_at' => $now,
+                    ),
+                    array('id' => $wpdb->insert_id),
+                    array('%s', '%s', '%s'),
+                    array('%d')
+                );
+
+                $wpdb->update(
+                    $recipients_table,
+                    array(
+                        'status'     => 'sent',
+                        'sent_at'    => $now,
+                        'updated_at' => $now,
+                    ),
+                    array('id' => $recipient->campaign_recipient_id),
+                    array('%s', '%s', '%s'),
+                    array('%d')
+                );
+            } else {
+                $failed_count++;
+                $error_message = !empty($result['message'])
+                    ? $result['message']
+                    : 'Unknown SendLayer error.';
+
+                $wpdb->update(
+                    $queue_table,
+                    array(
+                        'status'     => 'failed',
+                        'last_error' => $error_message,
+                        'updated_at' => $now,
+                    ),
+                    array('id' => $wpdb->insert_id),
+                    array('%s', '%s', '%s'),
+                    array('%d')
+                );
+
+                $wpdb->update(
+                    $recipients_table,
+                    array(
+                        'status'        => 'failed',
+                        'failed_at'     => $now,
+                        'error_message' => $error_message,
+                        'updated_at'    => $now,
+                    ),
+                    array('id' => $recipient->campaign_recipient_id),
+                    array('%s', '%s', '%s', '%s'),
+                    array('%d')
+                );
+            }
+        }
+
+        $remaining = (int) $wpdb->get_var(
+            $wpdb->prepare(
+                "SELECT COUNT(*) FROM $recipients_table WHERE campaign_id = %d AND status = 'pending'",
+                $campaign_id
+            )
+        );
+
+        $final_status = $remaining > 0 ? 'sending' : 'completed';
+
+        $wpdb->update(
+            $campaigns_table,
+            array(
+                'status'       => $final_status,
+                'completed_at' => $remaining > 0 ? null : $now,
+                'updated_at'   => $now,
+            ),
+            array('id' => $campaign_id),
+            array('%s', '%s', '%s'),
+            array('%d')
+        );
+
+        wp_safe_redirect(
+            add_query_arg(
+                array(
+                    'page'     => 'cem-campaigns',
+                    'campaign_id' => $campaign_id,
+                    'updated'  => 'campaign_sent',
+                    'sent'     => $sent_count,
+                    'failed'   => $failed_count,
+                ),
+                admin_url('admin.php')
+            )
+        );
+        exit;
+    }
+
+    /*
  * SEND CAMPAIGN TEST EMAIL
  */
 if (
@@ -2197,6 +2471,63 @@ function cem_render_campaign_editor($campaign_id) {
                         <p class="description">
                             This prepares the subscribers for the campaign.
                             No emails will be sent.
+                        </p>
+
+                    </form>
+
+                </div>
+
+            <?php endif; ?>
+
+
+            <!-- ========================================= -->
+            <!-- SEND CAMPAIGN - SEPARATE FORM -->
+            <!-- ========================================= -->
+
+            <?php if ($campaign->status === 'draft'): ?>
+
+                <div
+                    style="
+                        margin-top:20px;
+                        padding:20px;
+                        background:#fff8e5;
+                        border:1px solid #dba617;
+                    "
+                >
+
+                    <h3>Send Campaign</h3>
+
+                    <p>
+                        This will send the campaign to all prepared pending recipients
+                        in the selected mailing list.
+                    </p>
+
+                    <form method="post">
+
+                        <?php
+                        wp_nonce_field(
+                            'cem_send_campaign_action',
+                            'cem_send_campaign_nonce'
+                        );
+                        ?>
+
+                        <input
+                            type="hidden"
+                            name="campaign_id"
+                            value="<?php echo esc_attr($campaign->id); ?>"
+                        >
+
+                        <button
+                            type="submit"
+                            name="cem_send_campaign"
+                            class="button button-primary"
+                            onclick="return confirm('Send this campaign to all prepared recipients? This action cannot be undone.');"
+                        >
+                            Send Campaign
+                        </button>
+
+                        <p class="description">
+                            For the first test, only your 2 VIP Customers should be prepared.
                         </p>
 
                     </form>
