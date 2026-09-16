@@ -362,12 +362,10 @@ function cem_queue_contact_welcome_campaign($contact_id, $email, $name = '') {
     $inserted = $wpdb->insert($recipients_table, array(
         'campaign_id' => (int) $campaign->id,
         'contact_id'  => (int) $contact_id,
-        'email'       => $email,
-        'name'        => $name,
         'status'      => 'pending',
         'created_at'  => $now,
         'updated_at'  => $now,
-    ), array('%d','%d','%s','%s','%s','%s','%s'));
+    ), array('%d','%d','%s','%s','%s'));
 
     if (!$inserted) {
         return false;

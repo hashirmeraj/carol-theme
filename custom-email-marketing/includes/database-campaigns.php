@@ -31,6 +31,7 @@ function cem_create_campaign_tables() {
         plain_content LONGTEXT NULL,
         status VARCHAR(30) NOT NULL DEFAULT 'draft',
         campaign_type VARCHAR(30) NOT NULL DEFAULT 'newsletter',
+        list_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
         scheduled_at DATETIME NULL,
         started_at DATETIME NULL,
         completed_at DATETIME NULL,
@@ -39,6 +40,7 @@ function cem_create_campaign_tables() {
         PRIMARY KEY (id),
         KEY status (status),
         KEY campaign_type (campaign_type),
+        KEY list_id (list_id),
         KEY scheduled_at (scheduled_at)
     ) $charset_collate;";
 
