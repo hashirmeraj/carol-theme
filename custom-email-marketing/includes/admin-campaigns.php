@@ -148,23 +148,28 @@ function cem_handle_campaign_actions() {
         } else {
 
             /*
-             * Make sure selected list exists and is active.
+             * Welcome campaigns do not need a mailing list.
+             * Newsletter and Marketing campaigns must use an active list.
              */
-            $lists_table =
-                $wpdb->prefix . 'em_lists';
+            $valid_list = true;
 
-            $valid_list = $wpdb->get_var(
-                $wpdb->prepare(
-                    "
-                    SELECT id
-                    FROM $lists_table
-                    WHERE id = %d
-                    AND status = 'active'
-                    LIMIT 1
-                    ",
-                    $list_id
-                )
-            );
+            if ($campaign_type !== 'welcome') {
+                $lists_table =
+                    $wpdb->prefix . 'em_lists';
+
+                $valid_list = $wpdb->get_var(
+                    $wpdb->prepare(
+                        "
+                        SELECT id
+                        FROM $lists_table
+                        WHERE id = %d
+                        AND status = 'active'
+                        LIMIT 1
+                        ",
+                        $list_id
+                    )
+                );
+            }
 
             if (!$valid_list) {
 
@@ -302,6 +307,14 @@ function cem_handle_campaign_actions() {
             ? absint($_POST['list_id'])
             : 0;
 
+        $campaign_status = isset($_POST['campaign_status'])
+            ? sanitize_key(wp_unslash($_POST['campaign_status']))
+            : 'draft';
+
+        if (!in_array($campaign_status, array('draft', 'active'), true)) {
+            $campaign_status = 'draft';
+        }
+
 
         /*
          * Validation.
@@ -357,23 +370,28 @@ function cem_handle_campaign_actions() {
         } else {
 
             /*
-             * Make sure selected list exists and is active.
+             * Welcome campaigns do not need a mailing list.
+             * Newsletter and Marketing campaigns must use an active list.
              */
-            $lists_table =
-                $wpdb->prefix . 'em_lists';
+            $valid_list = true;
 
-            $valid_list = $wpdb->get_var(
-                $wpdb->prepare(
-                    "
-                    SELECT id
-                    FROM $lists_table
-                    WHERE id = %d
-                    AND status = 'active'
-                    LIMIT 1
-                    ",
-                    $list_id
-                )
-            );
+            if ($campaign_type !== 'welcome') {
+                $lists_table =
+                    $wpdb->prefix . 'em_lists';
+
+                $valid_list = $wpdb->get_var(
+                    $wpdb->prepare(
+                        "
+                        SELECT id
+                        FROM $lists_table
+                        WHERE id = %d
+                        AND status = 'active'
+                        LIMIT 1
+                        ",
+                        $list_id
+                    )
+                );
+            }
 
             if (!$valid_list) {
 
@@ -397,6 +415,7 @@ function cem_handle_campaign_actions() {
                         'campaign_type' => $campaign_type,
                         'list_id'       => $list_id,
                         'html_content'  => $html_content,
+                        'status'        => $campaign_status,
                         'updated_at'    => current_time('mysql'),
                     ),
                     array(
@@ -410,6 +429,7 @@ function cem_handle_campaign_actions() {
                         '%s',
                         '%s',
                         '%d',
+                        '%s',
                         '%s',
                         '%s',
                     ),
@@ -2225,18 +2245,14 @@ function cem_render_campaign_editor($campaign_id) {
 
                         <td>
 
-                            <strong>
-                                <?php
-                                echo esc_html(
-                                    ucfirst(
-                                        $campaign->status
-                                    )
-                                );
-                                ?>
-                            </strong>
+                            <select name="campaign_status" id="campaign_status">
+                                <option value="draft" <?php selected($campaign->status, 'draft'); ?>>Draft</option>
+                                <option value="active" <?php selected($campaign->status, 'active'); ?>>Active</option>
+                            </select>
 
                             <p class="description">
-                                Campaign emails are sent in the background through the email queue.
+                                Set Welcome campaigns to Active to automatically send them to new subscribers.
+                                Newsletter and Marketing campaigns are sent manually.
                             </p>
 
                         </td>
