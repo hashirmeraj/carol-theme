@@ -269,6 +269,7 @@ require_once plugin_dir_path(__FILE__) . 'includes/admin-contacts.php';
 require_once plugin_dir_path(__FILE__) . 'includes/admin-lists.php';
 require_once plugin_dir_path(__FILE__) . 'includes/database-campaigns.php';
 require_once plugin_dir_path(__FILE__) . 'includes/admin-campaigns.php';
+require_once plugin_dir_path(__FILE__) . 'includes/email-queue.php';
 /**
  * Create custom email marketing database tables.
  */
