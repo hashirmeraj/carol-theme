@@ -64,7 +64,6 @@ function cem_process_email_queue() {
             "SELECT *
              FROM $queue_table
              WHERE status = %s
-             AND campaign_type <> 'welcome'
              AND attempts < %d
              ORDER BY id ASC
              LIMIT %d",
@@ -265,74 +264,6 @@ function cem_process_email_queue() {
     }
 
     cem_mark_completed_campaigns();
-}
-
-/**
- * Queue a welcome email for a newly created contact.
- */
-function cem_queue_welcome_email($contact_id, $email, $name = '') {
-
-    global $wpdb;
-
-    $queue_table = $wpdb->prefix . 'em_email_queue';
-
-    $already_queued = $wpdb->get_var(
-        $wpdb->prepare(
-            "SELECT id
-             FROM $queue_table
-             WHERE campaign_id = 0
-             AND contact_id = %d
-             LIMIT 1",
-            $contact_id
-        )
-    );
-
-    if ($already_queued) {
-        return false;
-    }
-
-    $from_email = get_option('cem_sendlayer_from_email', '');
-    $from_name  = get_option('cem_sendlayer_from_name', '');
-
-    $subject = get_option(
-        'cem_welcome_email_subject',
-        'Welcome to our newsletter!'
-    );
-
-    $html_content = get_option(
-        'cem_welcome_email_html',
-        '<html><body><h2>Welcome!</h2><p>Thank you for subscribing to our newsletter.</p></body></html>'
-    );
-
-    $plain_content = wp_strip_all_tags($html_content);
-    $now = current_time('mysql');
-
-    return (bool) $wpdb->insert(
-        $queue_table,
-        array(
-            'campaign_id'           => 0,
-            'campaign_recipient_id' => 0,
-            'contact_id'            => $contact_id,
-            'to_email'              => $email,
-            'to_name'               => $name,
-            'subject'               => $subject,
-            'from_email'            => $from_email,
-            'from_name'             => $from_name,
-            'reply_to'              => $from_email,
-            'html_content'          => $html_content,
-            'plain_content'         => $plain_content,
-            'status'                => 'pending',
-            'attempts'              => 0,
-            'last_error'            => '',
-            'queued_at'             => $now,
-            'created_at'            => $now,
-            'updated_at'            => $now,
-        ),
-        array(
-            '%d','%d','%d','%s','%s','%s','%s','%s','%s',
-            '%s','%s','%s','%d','%s','%s','%s','%s'
-        )
-    );
 }
 
 /**
