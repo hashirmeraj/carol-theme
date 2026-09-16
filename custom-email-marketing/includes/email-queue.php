@@ -119,6 +119,22 @@ function cem_process_email_queue() {
 
         if (!empty($result['success'])) {
 
+            if ((int) $queue_item->campaign_id === 0) {
+                $wpdb->update(
+                    $queue_table,
+                    array(
+                        'status'     => 'sent',
+                        'sent_at'    => current_time('mysql'),
+                        'updated_at' => current_time('mysql'),
+                        'last_error' => '',
+                    ),
+                    array('id' => $queue_item->id),
+                    array('%s', '%s', '%s', '%s'),
+                    array('%d')
+                );
+                continue;
+            }
+
             $wpdb->update(
                 $queue_table,
                 array(
@@ -201,6 +217,21 @@ function cem_process_email_queue() {
                 )
             );
 
+            if ((int) $queue_item->campaign_id === 0) {
+                $wpdb->update(
+                    $queue_table,
+                    array(
+                        'status'     => $queue_status,
+                        'last_error' => $error_message,
+                        'updated_at' => current_time('mysql'),
+                    ),
+                    array('id' => $queue_item->id),
+                    array('%s', '%s', '%s'),
+                    array('%d')
+                );
+                continue;
+            }
+
             $recipient_update = array(
                 'status'        => $recipient_status,
                 'error_message' => $error_message,
@@ -236,6 +267,74 @@ function cem_process_email_queue() {
 }
 
 /**
+ * Queue a welcome email for a newly created contact.
+ */
+function cem_queue_welcome_email($contact_id, $email, $name = '') {
+
+    global $wpdb;
+
+    $queue_table = $wpdb->prefix . 'em_email_queue';
+
+    $already_queued = $wpdb->get_var(
+        $wpdb->prepare(
+            "SELECT id
+             FROM $queue_table
+             WHERE campaign_id = 0
+             AND contact_id = %d
+             LIMIT 1",
+            $contact_id
+        )
+    );
+
+    if ($already_queued) {
+        return false;
+    }
+
+    $from_email = get_option('cem_sendlayer_from_email', '');
+    $from_name  = get_option('cem_sendlayer_from_name', '');
+
+    $subject = get_option(
+        'cem_welcome_email_subject',
+        'Welcome to our newsletter!'
+    );
+
+    $html_content = get_option(
+        'cem_welcome_email_html',
+        '<html><body><h2>Welcome!</h2><p>Thank you for subscribing to our newsletter.</p></body></html>'
+    );
+
+    $plain_content = wp_strip_all_tags($html_content);
+    $now = current_time('mysql');
+
+    return (bool) $wpdb->insert(
+        $queue_table,
+        array(
+            'campaign_id'           => 0,
+            'campaign_recipient_id' => 0,
+            'contact_id'            => $contact_id,
+            'to_email'              => $email,
+            'to_name'               => $name,
+            'subject'               => $subject,
+            'from_email'            => $from_email,
+            'from_name'             => $from_name,
+            'reply_to'              => $from_email,
+            'html_content'          => $html_content,
+            'plain_content'         => $plain_content,
+            'status'                => 'pending',
+            'attempts'              => 0,
+            'last_error'            => '',
+            'queued_at'             => $now,
+            'created_at'            => $now,
+            'updated_at'            => $now,
+        ),
+        array(
+            '%d','%d','%d','%s','%s','%s','%s','%s','%s',
+            '%s','%s','%s','%d','%s','%s','%s','%s'
+        )
+    );
+}
+
+/**
  * Mark campaigns as completed when no queue items remain.
  */
 function cem_mark_completed_campaigns() {
@@ -248,7 +347,8 @@ function cem_mark_completed_campaigns() {
     $campaign_ids = $wpdb->get_col(
         "SELECT DISTINCT campaign_id
          FROM $queue_table
-         WHERE status IN ('pending', 'processing')"
+         WHERE campaign_id > 0
+         AND status IN ('pending', 'processing')"
     );
 
     $campaign_ids = array_map('absint', $campaign_ids);

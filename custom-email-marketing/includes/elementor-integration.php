@@ -99,6 +99,8 @@ function cem_capture_elementor_newsletter($record, $handler) {
     /*
      * Check whether contact already exists.
      */
+    $is_new_contact = false;
+
     $contact_id = $wpdb->get_var(
         $wpdb->prepare(
             "SELECT id
@@ -149,6 +151,7 @@ function cem_capture_elementor_newsletter($record, $handler) {
         }
 
         $contact_id = $wpdb->insert_id;
+        $is_new_contact = true;
 
     } else {
 
@@ -313,4 +316,13 @@ function cem_capture_elementor_newsletter($record, $handler) {
             )
         );
     }
+
+    /*
+     * Queue a welcome email only for a newly created contact.
+     * Campaign ID 0 identifies welcome emails in the shared queue table.
+     */
+    if ($is_new_contact && function_exists('cem_queue_welcome_email')) {
+        cem_queue_welcome_email($contact_id, $email, '');
+    }
+
 }
