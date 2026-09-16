@@ -657,6 +657,9 @@ if (
 
     /*
      * SEND CAMPAIGN TO RECIPIENTS
+     *
+     * Add emails to the background queue.
+     * The worker in includes/email-queue.php sends them later.
      */
     if (
         isset($_POST['cem_send_campaign']) &&
@@ -671,12 +674,7 @@ if (
             : 0;
 
         if (!$campaign_id) {
-            add_settings_error(
-                'cem_campaigns',
-                'invalid_campaign',
-                'Invalid campaign.',
-                'error'
-            );
+            add_settings_error('cem_campaigns', 'invalid_campaign', 'Invalid campaign.', 'error');
             return;
         }
 
@@ -688,48 +686,27 @@ if (
         );
 
         if (!$campaign) {
-            add_settings_error(
-                'cem_campaigns',
-                'campaign_not_found',
-                'Campaign not found.',
-                'error'
-            );
+            add_settings_error('cem_campaigns', 'campaign_not_found', 'Campaign not found.', 'error');
             return;
         }
 
         if ($campaign->status !== 'draft') {
-            add_settings_error(
-                'cem_campaigns',
-                'campaign_already_sent',
-                'Only draft campaigns can be sent.',
-                'error'
-            );
+            add_settings_error('cem_campaigns', 'campaign_already_sent', 'Only draft campaigns can be sent.', 'error');
             return;
         }
 
         if (empty($campaign->list_id)) {
-            add_settings_error(
-                'cem_campaigns',
-                'campaign_list_required',
-                'Please select a mailing list first.',
-                'error'
-            );
+            add_settings_error('cem_campaigns', 'campaign_list_required', 'Please select a mailing list first.', 'error');
             return;
         }
 
         if (empty($campaign->subject) || empty($campaign->html_content)) {
-            add_settings_error(
-                'cem_campaigns',
-                'campaign_content_required',
-                'Campaign subject and email content are required.',
-                'error'
-            );
+            add_settings_error('cem_campaigns', 'campaign_content_required', 'Campaign subject and email content are required.', 'error');
             return;
         }
 
         $recipients_table = $wpdb->prefix . 'em_campaign_recipients';
-        $contacts_table = $wpdb->prefix . 'em_contacts';
-        $queue_table = $wpdb->prefix . 'em_email_queue';
+        $queue_table      = $wpdb->prefix . 'em_email_queue';
 
         $recipients = $wpdb->get_results(
             $wpdb->prepare(
@@ -740,11 +717,11 @@ if (
                     c.email,
                     CONCAT(c.first_name, ' ', c.last_name) AS recipient_name
                 FROM $recipients_table cr
-                INNER JOIN $contacts_table c
+                INNER JOIN {$wpdb->prefix}em_contacts c
                     ON c.id = cr.contact_id
                 WHERE cr.campaign_id = %d
-                AND cr.status = 'pending'
-                AND c.status = 'active'
+                  AND cr.status = 'pending'
+                  AND c.status = 'active'
                 ORDER BY cr.id ASC
                 ",
                 $campaign_id
@@ -762,8 +739,6 @@ if (
         }
 
         $now = current_time('mysql');
-        $sent_count = 0;
-        $failed_count = 0;
 
         $wpdb->update(
             $campaigns_table,
@@ -777,37 +752,43 @@ if (
             array('%d')
         );
 
+        $queued_count = 0;
+        $failed_count = 0;
+
         foreach ($recipients as $recipient) {
-            $to_name = trim((string) $recipient->recipient_name);
 
             $queue_inserted = $wpdb->insert(
                 $queue_table,
                 array(
                     'campaign_id'           => $campaign_id,
-                    'campaign_recipient_id' => $recipient->campaign_recipient_id,
-                    'contact_id'            => $recipient->contact_id,
-                    'to_email'              => $recipient->email,
-                    'to_name'               => $to_name,
+                    'campaign_recipient_id' => absint($recipient->campaign_recipient_id),
+                    'contact_id'            => absint($recipient->contact_id),
+                    'to_email'              => sanitize_email($recipient->email),
+                    'to_name'               => trim((string) $recipient->recipient_name),
                     'subject'               => $campaign->subject,
                     'from_email'            => $campaign->from_email,
                     'from_name'             => $campaign->from_name,
                     'reply_to'              => $campaign->reply_to,
                     'html_content'          => $campaign->html_content,
                     'plain_content'         => $campaign->plain_content,
-                    'status'                => 'processing',
-                    'attempts'              => 1,
+                    'status'                => 'pending',
+                    'attempts'              => 0,
                     'queued_at'             => $now,
                     'created_at'            => $now,
                     'updated_at'            => $now,
                 ),
                 array(
                     '%d', '%d', '%d', '%s', '%s', '%s', '%s', '%s',
-                    '%s', '%s', '%s', '%s', '%d', '%s', '%s', '%s',
+                    '%s', '%s', '%s', '%s', '%s', '%d', '%s', '%s',
+                    '%s',
                 )
             );
 
-            if (!$queue_inserted) {
+            if ($queue_inserted) {
+                $queued_count++;
+            } else {
                 $failed_count++;
+
                 $wpdb->update(
                     $recipients_table,
                     array(
@@ -816,116 +797,26 @@ if (
                         'error_message' => 'Could not create email queue record.',
                         'updated_at'    => $now,
                     ),
-                    array('id' => $recipient->campaign_recipient_id),
-                    array('%s', '%s', '%s', '%s'),
-                    array('%d')
-                );
-                continue;
-            }
-
-            $result = cem_send_email_via_sendlayer(
-                $recipient->email,
-                $to_name,
-                $campaign->subject,
-                $campaign->html_content,
-                $campaign->plain_content,
-                $campaign->from_email,
-                $campaign->from_name,
-                $campaign->reply_to
-            );
-
-            if (!empty($result['success'])) {
-                $sent_count++;
-
-                $wpdb->update(
-                    $queue_table,
-                    array(
-                        'status'     => 'sent',
-                        'sent_at'    => $now,
-                        'updated_at' => $now,
-                    ),
-                    array('id' => $wpdb->insert_id),
-                    array('%s', '%s', '%s'),
-                    array('%d')
-                );
-
-                $wpdb->update(
-                    $recipients_table,
-                    array(
-                        'status'     => 'sent',
-                        'sent_at'    => $now,
-                        'updated_at' => $now,
-                    ),
-                    array('id' => $recipient->campaign_recipient_id),
-                    array('%s', '%s', '%s'),
-                    array('%d')
-                );
-            } else {
-                $failed_count++;
-                $error_message = !empty($result['message'])
-                    ? $result['message']
-                    : 'Unknown SendLayer error.';
-
-                $wpdb->update(
-                    $queue_table,
-                    array(
-                        'status'     => 'failed',
-                        'last_error' => $error_message,
-                        'updated_at' => $now,
-                    ),
-                    array('id' => $wpdb->insert_id),
-                    array('%s', '%s', '%s'),
-                    array('%d')
-                );
-
-                $wpdb->update(
-                    $recipients_table,
-                    array(
-                        'status'        => 'failed',
-                        'failed_at'     => $now,
-                        'error_message' => $error_message,
-                        'updated_at'    => $now,
-                    ),
-                    array('id' => $recipient->campaign_recipient_id),
+                    array('id' => absint($recipient->campaign_recipient_id)),
                     array('%s', '%s', '%s', '%s'),
                     array('%d')
                 );
             }
         }
 
-        $remaining = (int) $wpdb->get_var(
-            $wpdb->prepare(
-                "SELECT COUNT(*) FROM $recipients_table WHERE campaign_id = %d AND status = 'pending'",
-                $campaign_id
-            )
-        );
-
-        $final_status = $remaining > 0 ? 'sending' : 'completed';
-
-        $wpdb->update(
-            $campaigns_table,
-            array(
-                'status'       => $final_status,
-                'completed_at' => $remaining > 0 ? null : $now,
-                'updated_at'   => $now,
-            ),
-            array('id' => $campaign_id),
-            array('%s', '%s', '%s'),
-            array('%d')
-        );
-
         wp_safe_redirect(
             add_query_arg(
                 array(
-                    'page'     => 'cem-campaigns',
+                    'page'        => 'cem-campaigns',
                     'campaign_id' => $campaign_id,
-                    'updated'  => 'campaign_sent',
-                    'sent'     => $sent_count,
-                    'failed'   => $failed_count,
+                    'updated'     => 'campaign_queued',
+                    'queued'      => $queued_count,
+                    'failed'      => $failed_count,
                 ),
                 admin_url('admin.php')
             )
         );
+
         exit;
     }
 
@@ -1429,13 +1320,13 @@ function cem_render_campaigns_page() {
                                         Sending
                                     </span>
 
-                                <?php elseif ($status === 'sent'): ?>
+                                <?php elseif ($status === 'sent' || $status === 'completed'): ?>
 
                                     <span style="color:#008a20;font-weight:600;">
-                                        Sent
+                                        Completed
                                     </span>
 
-                                <?php elseif ($status === 'failed'): ?>
+                                <?php elseif ($status === 'completed_with_errors' || $status === 'failed'): ?>
 
                                     <span style="color:#b32d2e;font-weight:600;">
                                         Failed
@@ -2333,7 +2224,7 @@ function cem_render_campaign_editor($campaign_id) {
                             </strong>
 
                             <p class="description">
-                                Email sending is not enabled yet.
+                                Campaign emails are sent in the background through the email queue.
                             </p>
 
                         </td>
@@ -2521,13 +2412,13 @@ function cem_render_campaign_editor($campaign_id) {
                             type="submit"
                             name="cem_send_campaign"
                             class="button button-primary"
-                            onclick="return confirm('Send this campaign to all prepared recipients? This action cannot be undone.');"
+                            onclick="return confirm('Add this campaign to the background queue? Emails will be sent automatically.');"
                         >
                             Send Campaign
                         </button>
 
                         <p class="description">
-                            For the first test, only your 2 VIP Customers should be prepared.
+                            For the first test, only your 2 VIP Customers should be prepared. The page will return immediately while emails send in the background.
                         </p>
 
                     </form>
@@ -2620,9 +2511,17 @@ function cem_render_campaign_editor($campaign_id) {
             >
 
                 <p>
-                    This campaign is currently only a draft.
-                    No emails will be sent from this screen except
-                    when you explicitly use Send Test Email.
+                    <?php if ($campaign->status === 'draft'): ?>
+                        This campaign is currently a draft. Prepare recipients and then add the campaign to the background queue.
+                    <?php elseif ($campaign->status === 'sending'): ?>
+                        This campaign is currently being processed in the background. You can leave this page and continue using the dashboard.
+                    <?php elseif ($campaign->status === 'completed' || $campaign->status === 'sent'): ?>
+                        This campaign has finished processing.
+                    <?php elseif ($campaign->status === 'completed_with_errors' || $campaign->status === 'failed'): ?>
+                        This campaign has finished processing, but some emails could not be sent.
+                    <?php else: ?>
+                        Current campaign status: <?php echo esc_html(ucfirst($campaign->status)); ?>.
+                    <?php endif; ?>
                 </p>
 
             </div>
@@ -2667,6 +2566,9 @@ function cem_display_campaign_notice() {
 
         'recipients_prepared' =>
             'Campaign recipients prepared successfully.',
+
+        'campaign_queued' =>
+            'Campaign emails were added to the background queue.',
     );
 
 
@@ -2692,6 +2594,19 @@ function cem_display_campaign_notice() {
             echo esc_html(
                 $messages[$updated]
             );
+
+            if ($updated === 'campaign_queued') {
+                $queued = isset($_GET['queued']) ? absint($_GET['queued']) : 0;
+                $failed = isset($_GET['failed']) ? absint($_GET['failed']) : 0;
+
+                echo ' ' . esc_html(
+                    sprintf(
+                        'Queued: %d. Failed to queue: %d.',
+                        $queued,
+                        $failed
+                    )
+                );
+            }
             ?>
 
         </p>
