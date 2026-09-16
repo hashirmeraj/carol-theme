@@ -1679,6 +1679,10 @@ function cem_render_create_campaign_form() {
                                 Marketing
                             </option>
 
+                            <option value="welcome">
+                                Welcome
+                            </option>
+
                         </select>
 
                     </td>
@@ -1699,7 +1703,6 @@ function cem_render_create_campaign_form() {
                         <select
                             id="list_id"
                             name="list_id"
-                            required
                         >
 
                             <option value="">
@@ -2123,6 +2126,16 @@ function cem_render_campaign_editor($campaign_id) {
                                     Marketing
                                 </option>
 
+                                <option
+                                    value="welcome"
+                                    <?php selected(
+                                        $campaign->campaign_type,
+                                        'welcome'
+                                    ); ?>
+                                >
+                                    Welcome
+                                </option>
+
                             </select>
 
                         </td>
@@ -2145,7 +2158,6 @@ function cem_render_campaign_editor($campaign_id) {
                             <select
                                 id="list_id"
                                 name="list_id"
-                                required
                             >
 
                                 <option value="">
