@@ -136,7 +136,7 @@ function cem_handle_campaign_actions() {
                 'error'
             );
 
-        } elseif (!$list_id) {
+        } elseif (!$list_id && $campaign_type !== 'welcome') {
 
             add_settings_error(
                 'cem_campaigns',
@@ -345,7 +345,7 @@ function cem_handle_campaign_actions() {
                 'error'
             );
 
-        } elseif (!$list_id) {
+        } elseif (!$list_id && $campaign_type !== 'welcome') {
 
             add_settings_error(
                 'cem_campaigns',

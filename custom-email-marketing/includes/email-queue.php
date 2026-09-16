@@ -64,6 +64,7 @@ function cem_process_email_queue() {
             "SELECT *
              FROM $queue_table
              WHERE status = %s
+             AND campaign_type <> 'welcome'
              AND attempts < %d
              ORDER BY id ASC
              LIMIT %d",

@@ -321,8 +321,76 @@ function cem_capture_elementor_newsletter($record, $handler) {
      * Queue a welcome email only for a newly created contact.
      * Campaign ID 0 identifies welcome emails in the shared queue table.
      */
-    if ($is_new_contact && function_exists('cem_queue_welcome_email')) {
-        cem_queue_welcome_email($contact_id, $email, '');
+    if ($is_new_contact && function_exists('cem_queue_contact_welcome_campaign')) {
+        cem_queue_contact_welcome_campaign($contact_id, $email, '');
     }
 
+}
+
+/**
+ * Queue the active welcome campaign for one newly-created contact.
+ */
+function cem_queue_contact_welcome_campaign($contact_id, $email, $name = '') {
+    global $wpdb;
+
+    $campaigns_table   = $wpdb->prefix . 'em_campaigns';
+    $recipients_table  = $wpdb->prefix . 'em_campaign_recipients';
+    $queue_table       = $wpdb->prefix . 'em_email_queue';
+
+    $campaign = $wpdb->get_row(
+        "SELECT * FROM $campaigns_table
+         WHERE campaign_type = 'welcome'
+         AND status = 'active'
+         ORDER BY id ASC LIMIT 1"
+    );
+
+    if (!$campaign) {
+        return false;
+    }
+
+    $existing = $wpdb->get_var($wpdb->prepare(
+        "SELECT id FROM $recipients_table
+         WHERE campaign_id = %d AND contact_id = %d LIMIT 1",
+        $campaign->id, $contact_id
+    ));
+
+    if ($existing) {
+        return false;
+    }
+
+    $now = current_time('mysql');
+    $inserted = $wpdb->insert($recipients_table, array(
+        'campaign_id' => (int) $campaign->id,
+        'contact_id'  => (int) $contact_id,
+        'email'       => $email,
+        'name'        => $name,
+        'status'      => 'pending',
+        'created_at'  => $now,
+        'updated_at'  => $now,
+    ), array('%d','%d','%s','%s','%s','%s','%s'));
+
+    if (!$inserted) {
+        return false;
+    }
+
+    $recipient_id = $wpdb->insert_id;
+    return (bool) $wpdb->insert($queue_table, array(
+        'campaign_id'           => (int) $campaign->id,
+        'campaign_recipient_id' => (int) $recipient_id,
+        'contact_id'            => (int) $contact_id,
+        'to_email'              => $email,
+        'to_name'               => $name,
+        'subject'               => $campaign->subject,
+        'from_email'            => $campaign->from_email,
+        'from_name'             => $campaign->from_name,
+        'reply_to'              => $campaign->reply_to,
+        'html_content'          => $campaign->html_content,
+        'plain_content'         => $campaign->plain_content,
+        'status'                => 'pending',
+        'attempts'              => 0,
+        'last_error'            => '',
+        'queued_at'             => $now,
+        'created_at'            => $now,
+        'updated_at'            => $now,
+    ), array('%d','%d','%d','%s','%s','%s','%s','%s','%s','%s','%s','%s','%d','%s','%s','%s','%s'));
 }
